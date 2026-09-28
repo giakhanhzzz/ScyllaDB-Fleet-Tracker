@@ -1,0 +1,6 @@
+{
+  "name": "ScyllaDB Fleet Tracker",
+  "description": "Hệ thống quản lý dữ liệu theo dõi vị trí phương tiện vận tải và lịch sử hành trình của đội xe (scylladb-fleet-tracker)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

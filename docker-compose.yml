@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  scylla:
+    image: scylladb/scylla:5.4
+    container_name: scylla-node
+    restart: unless-stopped
+    # Giới hạn tài nguyên để vận hành an toàn trên máy Windows 8GB RAM:
+    # --smp 1: Dùng 1 CPU core logic
+    # --memory 1500M: Giới hạn RAM Scylla cấp phát 1.5GB
+    # --overprovisioned 1: Chế độ tối ưu khi chạy trên môi trường chia sẻ tài nguyên / Docker desktop
+    # --api-address 0.0.0.0: Cho phép REST API lắng nghe từ bên ngoài
+    command: --smp 1 --memory 1500M --overprovisioned 1 --api-address 0.0.0.0
+    ports:
+      - "9042:9042"   # CQL Native Transport (DBeaver, cassandra-driver, backend)
+      - "10000:10000" # Scylla REST Management API (nodetool / monitoring)
+    volumes:
+      - scylla_data:/var/lib/scylla
+    networks:
+      - fleet-network
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES;' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  scylla_data:
+    name: scylla_fleet_data
+
+networks:
+  fleet-network:
+    name: scylla_fleet_network
+    driver: bridge
