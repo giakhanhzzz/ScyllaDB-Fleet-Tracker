@@ -178,3 +178,27 @@
 - `[ĐÃ XÁC MINH]` Sau quyết định trên, commit `1e7e5fb` chứa frontend/API/
   test/tài liệu đã push thành công lên `origin/main` cùng commit nền tảng
   `1c7d9e4`. Đây là phát hành mã nguồn, không phải nghiệm thu Scylla/GUI.
+
+### 2026-10-04 — Rà soát và nối vòng đời chuyến
+
+- `[PHÁT HIỆN]` Trip PLANNED đang dùng thời điểm tạo làm start_time tạm;
+  không có thao tác start nên GPS không thể gắn trip mới. Nếu tạo active marker
+  trước GPS, latest row chưa có tọa độ và frontend cũ có thể vẽ null thành
+  (0,0). Có rủi ro sửa phân công xe/tài xế trong lúc start/GPS.
+- `[ĐÃ VIẾT - CHƯA TÍCH HỢP SCYLLA]` Start chuyển start_time sang thời điểm
+  thực, di chuyển khóa projection ngày/tháng, giữ trip_id trong latest row;
+  GPS chỉ gắn event sau start. End đọc GPS theo bucket xe/ngày, lọc theo trip,
+  tính km và rejected_points rồi cập nhật ba projection; cancel cập nhật trạng
+  thái, xóa marker nếu đang chạy. Frontend có nút tương ứng; latest stub không
+  được hiện thành tọa độ. Một lock trong worker bảo vệ các chuyển trạng thái
+  cùng ingestion và thay đổi phân công.
+- `[ĐÃ XÁC MINH]` 50 test fake-DB/API đạt và node --check frontend/app.js
+  đạt. Chưa có Docker CLI/Scylla thật trong phiên; CQL batch và browser E2E
+  cần thử trên máy demo. Theo tài liệu Scylla, logged batch không có isolation
+  như SQL; cùng khóa DELETE/INSERT trong một batch có thể bị tombstone thắng,
+  nên start tránh trùng khóa timestamp đến độ phân giải millisecond.
+- `[GIỚI HẠN]` Lock chỉ cho một Uvicorn worker; muốn scale nhiều worker
+  phải có claim trạng thái bền ở CSDL. End hiện giữ điểm của một chuyến trong
+  RAM; cần tính streaming nếu hành trình rất dài. Seed ngày cố định 28/09/2026
+  có trip IN_PROGRESS lịch sử, không phản ánh trạng thái ngày demo mới; cần
+  xử lý khi chuẩn hóa seed hoặc chọn SEED_DATE thích hợp.

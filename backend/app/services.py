@@ -1,8 +1,16 @@
 import math
+from threading import Lock
 from datetime import datetime, timezone
 from typing import List, Tuple
 from cassandra.util import Date as CQLDate
 from app.database import db
+
+# ponytail: one FastAPI worker serializes trip transitions and GPS writes; use
+# a database-backed active-trip claim before running multiple API workers.
+trip_write_lock = Lock()
+
+def as_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
 
 def row_to_dict(row):
     """Cassandra timestamps are naive UTC; expose explicit UTC to browsers."""

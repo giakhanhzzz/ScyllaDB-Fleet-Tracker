@@ -1,22 +1,15 @@
 from datetime import date, datetime, timedelta, timezone
-from threading import Lock
 from uuid import UUID, uuid1
 from fastapi import APIRouter, Depends, HTTPException, Query
 from cassandra.query import BatchStatement
 from app.database import db
 from app.schemas import GPSIngest, AlertAction
 from app.security import require_role
-from app.services import check_geofence, row_to_dict
+from app.services import as_utc, check_geofence, row_to_dict, trip_write_lock
 
 router = APIRouter(prefix="/api/tracking", tags=["Tracking"], dependencies=[Depends(db.require_ready)])
 read_role = require_role(["ADMIN", "DISPATCHER", "VIEWER"])
 write_role = require_role(["ADMIN", "DISPATCHER"])
-# ponytail: one demo process serializes GPS writes; per-vehicle locks if throughput requires it.
-ingest_lock = Lock()
-
-def as_utc(value):
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-
 def owned_vehicle(vehicle_id, company):
     row = db.execute("SELECT * FROM vehicles_by_id WHERE vehicle_id = %s", (vehicle_id,)).one()
     if not row or row.company_id != company:
@@ -26,7 +19,7 @@ def owned_vehicle(vehicle_id, company):
 @router.get("/latest")
 def get_latest_locations(user=Depends(read_role)):
     rows = db.execute(db.prepared_statements["latest_locations"], (user["company_id"],))
-    return [row_to_dict(row) for row in rows]
+    return [row_to_dict(row) for row in rows if row.event_time is not None]
 
 @router.get("/history")
 def get_vehicle_history(vehicle_id: str, date_str: date | None = None,
@@ -93,9 +86,6 @@ def create_alert(company, vehicle, trip_id, alert_type, details, now):
 @router.post("/ingest")
 def ingest_gps(req: GPSIngest, user=Depends(write_role)):
     company = user["company_id"]
-    vehicle = owned_vehicle(req.vehicle_id, company)
-    if vehicle.status in ("INACTIVE", "MAINTENANCE"):
-        raise HTTPException(409, "Xe đã ngừng hoạt động hoặc đang bảo trì")
     ev_time = req.timestamp.astimezone(timezone.utc)
     ev_time = ev_time.replace(microsecond=ev_time.microsecond // 1000 * 1000)
     now = datetime.now(timezone.utc)
@@ -105,20 +95,28 @@ def ingest_gps(req: GPSIngest, user=Depends(write_role)):
     id_millis = (req.event_id.time - 0x01B21DD213814000) // 10000
     if round(ev_time.timestamp() * 1000) != id_millis:
         raise HTTPException(422, "event_id và timestamp phải cùng mốc thời gian")
-    with ingest_lock:
+    with trip_write_lock:
+        vehicle = owned_vehicle(req.vehicle_id, company)
+        if vehicle.status in ("INACTIVE", "MAINTENANCE"):
+            raise HTTPException(409, "Xe đã ngừng hoạt động hoặc đang bảo trì")
         existing = db.execute(
-            "SELECT lat,lng,speed,heading FROM location_events_by_vehicle_day "
+            "SELECT lat,lng,speed,heading,trip_id FROM location_events_by_vehicle_day "
             "WHERE vehicle_id = %s AND event_date = %s AND event_time = %s AND event_id = %s",
             (req.vehicle_id, ev_time.date(), ev_time, req.event_id),
         ).one()
         if existing and (existing.lat, existing.lng, existing.speed, existing.heading) != (req.lat, req.lng, req.speed, req.heading):
             raise HTTPException(409, "Không được thay đổi nội dung event đã ghi")
         latest = db.execute("SELECT * FROM latest_locations_by_company WHERE company_id = %s AND vehicle_id = %s", (company, req.vehicle_id)).one()
+        active_trip_id = None
         trip_id = None
         if latest and latest.trip_id:
-            trip = db.execute("SELECT company_id,vehicle_id,status FROM trips_by_id WHERE trip_id = %s", (latest.trip_id,)).one()
+            trip = db.execute("SELECT company_id,vehicle_id,status,start_time FROM trips_by_id WHERE trip_id = %s", (latest.trip_id,)).one()
             if trip and trip.company_id == company and trip.vehicle_id == req.vehicle_id and trip.status == "IN_PROGRESS":
-                trip_id = latest.trip_id
+                active_trip_id = latest.trip_id
+                if ev_time >= as_utc(trip.start_time):
+                    trip_id = active_trip_id
+        if existing:
+            trip_id = existing.trip_id
         db.execute(
             "INSERT INTO location_events_by_vehicle_day (vehicle_id,event_date,event_time,event_id,lat,lng,speed,heading,trip_id,company_id) "
             "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
@@ -126,14 +124,17 @@ def ingest_gps(req: GPSIngest, user=Depends(write_role)):
         )
         db.execute("INSERT INTO vehicle_activity_by_hour (company_id,activity_date,hour,event_time,vehicle_id,event_id,speed) VALUES (%s,%s,%s,%s,%s,%s,%s)",
                    (company,ev_time.date(),ev_time.hour,ev_time,req.vehicle_id,req.event_id,req.speed))
-        fresh = not latest or ev_time > as_utc(latest.event_time)
+        fresh = not latest or latest.event_time is None or ev_time > as_utc(latest.event_time)
         if fresh:
-            values = (ev_time,req.lat,req.lng,req.speed,req.heading,trip_id,"RUNNING" if req.speed > 0 else "IDLE",company,req.vehicle_id)
-            if latest:
+            values = (ev_time,req.lat,req.lng,req.speed,req.heading,active_trip_id,"RUNNING" if req.speed > 0 else "IDLE",company,req.vehicle_id)
+            if latest and latest.event_time is not None:
                 result = db.execute("UPDATE latest_locations_by_company SET event_time=%s,lat=%s,lng=%s,speed=%s,heading=%s,trip_id=%s,status=%s WHERE company_id=%s AND vehicle_id=%s IF event_time < %s", values + (ev_time,)).one()
+                fresh = bool(result and result.applied)
+            elif latest:
+                db.execute("UPDATE latest_locations_by_company SET event_time=%s,lat=%s,lng=%s,speed=%s,heading=%s,trip_id=%s,status=%s WHERE company_id=%s AND vehicle_id=%s", values)
             else:
                 result = db.execute("INSERT INTO latest_locations_by_company (event_time,lat,lng,speed,heading,trip_id,status,company_id,vehicle_id) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s) IF NOT EXISTS", values).one()
-            fresh = bool(result and result.applied)
+                fresh = bool(result and result.applied)
         if fresh:
             if req.speed > vehicle.speed_limit:
                 create_alert(company, vehicle, trip_id, "OVERSPEED", f"Vận tốc {req.speed} > giới hạn {vehicle.speed_limit} km/h", now)

@@ -84,6 +84,12 @@ class PermissionTests(unittest.TestCase):
         result = self.client.post("/api/tracking/ingest", headers=self.headers, json={})
         self.assertEqual(result.status_code, 403)
 
+    def test_viewer_cannot_change_trip_lifecycle(self):
+        for action in ("start", "end", "cancel"):
+            with self.subTest(action=action):
+                result = self.client.post("/api/fleet/trips/T/" + action, headers=self.headers)
+                self.assertEqual(result.status_code, 403)
+
     def test_viewer_cannot_resolve_alert(self):
         result = self.client.post("/api/tracking/alerts/action", headers=self.headers,
                                   json={"alert_id": str(uuid1()), "status": "RESOLVED"})
@@ -211,6 +217,27 @@ class PermissionTests(unittest.TestCase):
         self.assertEqual(len(queries), 3)
         self.assertTrue(any(query.startswith("DELETE FROM vehicles_by_status") for query in queries))
 
+    def test_vehicle_assignment_cannot_change_during_trip(self):
+        self.user.role = "DISPATCHER"
+        current = SimpleNamespace(vehicle_id="V",company_id="COMP_TEST",plate="P",model="M",
+                                  current_driver_id="D",status="RUNNING",speed_limit=80)
+        previous = self.execute
+        def execute(statement, parameters=()):
+            if isinstance(statement, str) and "FROM vehicles_by_id" in statement:
+                return Rows([current])
+            if isinstance(statement, str) and "FROM drivers_by_id" in statement:
+                return Rows([SimpleNamespace(company_id="COMP_TEST",active=True)])
+            if isinstance(statement, str) and "FROM latest_locations_by_company" in statement:
+                return Rows([SimpleNamespace(trip_id="T")])
+            if isinstance(statement, str) and "FROM trips_by_id" in statement:
+                return Rows([SimpleNamespace(status="IN_PROGRESS")])
+            return previous(statement, parameters)
+        with patch.object(db, "execute", side_effect=execute):
+            result = self.client.patch("/api/fleet/vehicles/V", headers=self.headers,
+                                       json={"current_driver_id":"OTHER"})
+        self.assertEqual(result.status_code, 409)
+        self.assertFalse(any(isinstance(statement, BatchStatement) for statement, _ in self.calls))
+
     def test_driver_deactivation_rejects_assigned_vehicle(self):
         self.user.role = "DISPATCHER"
         current = SimpleNamespace(driver_id="D",company_id="COMP_TEST",full_name="Tài xế",
@@ -284,6 +311,102 @@ class PermissionTests(unittest.TestCase):
                 "origin":"Điểm A","destination":"Điểm B"})
         self.assertEqual(result.status_code, 422)
         self.assertFalse(any(isinstance(statement, BatchStatement) for statement, _ in self.calls))
+
+    def test_start_moves_trip_keys_and_claims_vehicle(self):
+        from datetime import datetime, timedelta, timezone
+        self.user.role = "DISPATCHER"
+        old = datetime.now(timezone.utc) - timedelta(hours=1)
+        trip = SimpleNamespace(trip_id="T",company_id="COMP_TEST",vehicle_id="V",driver_id="D",
+                               origin="A",destination="B",start_time=old,status="PLANNED")
+        vehicle = SimpleNamespace(company_id="COMP_TEST",status="IDLE",current_driver_id="D")
+        driver = SimpleNamespace(company_id="COMP_TEST",active=True)
+        previous = self.execute
+        def execute(statement, parameters=()):
+            if isinstance(statement, str) and "FROM trips_by_id" in statement:
+                return Rows([trip])
+            if isinstance(statement, str) and "FROM vehicles_by_id" in statement:
+                return Rows([vehicle])
+            if isinstance(statement, str) and "FROM drivers_by_id" in statement:
+                return Rows([driver])
+            return previous(statement, parameters)
+        with patch.object(db, "execute", side_effect=execute):
+            result = self.client.post("/api/fleet/trips/T/start", headers=self.headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertEqual(result.json()["status"], "IN_PROGRESS")
+        batches = [statement for statement, _ in self.calls if isinstance(statement, BatchStatement)]
+        self.assertEqual(len(batches), 1)
+        queries = [query for _, query, _ in batches[0]._statements_and_parameters]
+        self.assertEqual(len(queries), 6)
+        self.assertTrue(any(query.startswith("DELETE FROM trips_by_company_day") for query in queries))
+        self.assertTrue(any(query.startswith("DELETE FROM trips_by_driver_month") for query in queries))
+        self.assertTrue(any(query.startswith("UPDATE latest_locations_by_company") for query in queries))
+
+    def test_start_rejects_another_active_trip(self):
+        from datetime import datetime, timezone
+        self.user.role = "DISPATCHER"
+        trip = SimpleNamespace(trip_id="T",company_id="COMP_TEST",vehicle_id="V",driver_id="D",
+                               start_time=datetime.now(timezone.utc),status="PLANNED")
+        vehicle = SimpleNamespace(company_id="COMP_TEST",status="IDLE",current_driver_id="D")
+        driver = SimpleNamespace(company_id="COMP_TEST",active=True)
+        previous = self.execute
+        def execute(statement, parameters=()):
+            if isinstance(statement, str) and "FROM trips_by_id" in statement:
+                return Rows([SimpleNamespace(status="IN_PROGRESS")]) if parameters == ("OTHER",) else Rows([trip])
+            if isinstance(statement, str) and "FROM vehicles_by_id" in statement:
+                return Rows([vehicle])
+            if isinstance(statement, str) and "FROM drivers_by_id" in statement:
+                return Rows([driver])
+            if isinstance(statement, str) and "FROM latest_locations_by_company" in statement:
+                return Rows([SimpleNamespace(trip_id="OTHER")])
+            return previous(statement, parameters)
+        with patch.object(db, "execute", side_effect=execute):
+            result = self.client.post("/api/fleet/trips/T/start", headers=self.headers)
+        self.assertEqual(result.status_code, 409)
+        self.assertFalse(any(isinstance(statement, BatchStatement) for statement, _ in self.calls))
+
+    def test_end_counts_only_this_trip_points_and_clears_marker(self):
+        from datetime import datetime, timedelta, timezone
+        self.user.role = "DISPATCHER"
+        start = datetime.now(timezone.utc) - timedelta(minutes=3)
+        trip = SimpleNamespace(trip_id="T",company_id="COMP_TEST",vehicle_id="V",driver_id="D",
+                               start_time=start,status="IN_PROGRESS")
+        points = Rows([
+            SimpleNamespace(lat=10.0,lng=106.0,event_time=start,trip_id="T"),
+            SimpleNamespace(lat=10.001,lng=106.0,event_time=start + timedelta(minutes=1),trip_id="T"),
+            SimpleNamespace(lat=20.0,lng=120.0,event_time=start + timedelta(minutes=2),trip_id="OTHER"),
+        ])
+        previous = self.execute
+        def execute(statement, parameters=()):
+            if isinstance(statement, str) and "FROM trips_by_id" in statement:
+                return Rows([trip])
+            if isinstance(statement, str) and "FROM location_events_by_vehicle_day" in statement:
+                return points
+            if isinstance(statement, str) and "FROM latest_locations_by_company" in statement:
+                return Rows([SimpleNamespace(trip_id="T")])
+            return previous(statement, parameters)
+        with patch.object(db, "execute", side_effect=execute):
+            result = self.client.post("/api/fleet/trips/T/end", headers=self.headers)
+        self.assertEqual(result.status_code, 200)
+        self.assertAlmostEqual(result.json()["distance_km"], 0.11, places=2)
+        batches = [statement for statement, _ in self.calls if isinstance(statement, BatchStatement)]
+        self.assertEqual(len(batches), 1)
+        self.assertEqual(len(batches[0]._statements_and_parameters), 4)
+
+    def test_cancel_planned_trip_keeps_no_active_marker(self):
+        from datetime import datetime, timezone
+        self.user.role = "DISPATCHER"
+        trip = SimpleNamespace(trip_id="T",company_id="COMP_TEST",vehicle_id="V",driver_id="D",
+                               start_time=datetime.now(timezone.utc),status="PLANNED")
+        previous = self.execute
+        def execute(statement, parameters=()):
+            if isinstance(statement, str) and "FROM trips_by_id" in statement:
+                return Rows([trip])
+            return previous(statement, parameters)
+        with patch.object(db, "execute", side_effect=execute):
+            result = self.client.post("/api/fleet/trips/T/cancel", headers=self.headers)
+        self.assertEqual(result.status_code, 200)
+        batches = [statement for statement, _ in self.calls if isinstance(statement, BatchStatement)]
+        self.assertEqual(len(batches[0]._statements_and_parameters), 3)
 
     def test_unauthenticated_gps_is_rejected(self):
         self.assertEqual(self.client.post("/api/tracking/ingest", json={}).status_code, 401)

@@ -1,6 +1,6 @@
 # Bằng chứng kiểm thử và gate nghiệm thu
 
-Bổ sung 03/10/2026: bản frontend tĩnh được viết trong workspace local; các gate
+Bổ sung 04/10/2026: vòng đời trip được viết và kiểm thử fake-DB; các gate
 ScyllaDB thật bên dưới vẫn CHƯA KIỂM CHỨNG.
 
 ## Nguồn và môi trường — 28/09/2026
@@ -29,8 +29,8 @@ bằng commit/ref GitHub, không đồng nghĩa các gate ScyllaDB đã đạt.
 
 | Kiểm tra | Kết quả | Giới hạn |
 | --- | --- | --- |
-| `python -m unittest discover -s backend/tests -q` | PASS — 41 tests, OK (03/10) | DB giả lập; không có Scylla server |
-| `node --check frontend/app.js` | PASS (03/10) | Chỉ cú pháp JS, chưa phải browser E2E |
+| `python -m unittest discover -s backend/tests -q` | PASS — 50 tests, OK (04/10) | DB giả lập; không có Scylla server |
+| `node --check frontend/app.js` | PASS (04/10) | Chỉ cú pháp JS, chưa phải browser E2E |
 | GET `/`, `/app.js`, `/styles.css`, Leaflet asset bằng TestClient | PASS (03/10) | TestClient không chạy lifespan/Scylla; frontend khác React prototype |
 | Python `ast.parse` cho source backend/database/scripts/simulator | PASS — 15 file | Cú pháp, không phải hành vi CQL |
 | `yaml.safe_load` + kiểm tra service/profile | PASS | Không thay cho `docker compose config` |
@@ -58,8 +58,8 @@ source test. Không dùng các kết quả này để tick CQL, integration hay 
 | P2 Model/query | 15 bảng, đúng PK/clustering/TTL, Q1–Q14 chạy được không ALLOW FILTERING | CHƯA KIỂM CHỨNG |
 | P3 Seed | 3 user, 10 xe, 8 tài xế, 20 chuyến, 3.200 GPS; chạy lại đối chiếu count | CHƯA KIỂM CHỨNG |
 | API integration | Đăng nhập, Viewer 403, ingest đọc lại CQL/latest, restart vẫn có dữ liệu | CHƯA KIỂM CHỨNG |
-| Nghiệp vụ | CRUD, start/end/cancel, km từ GPS, ba loại alert đúng workflow | CRUD user/xe/tài xế + tạo trip PLANNED ĐÃ VIẾT; lifecycle/ALERT CÒN THIẾU; CHƯA KIỂM CHỨNG SCYLLA |
-| Frontend | Leaflet và các thao tác gọi API, role thật, không in-memory giả | ĐÃ VIẾT/MOUNT STATIC; CHƯA CHẠY VỚI SCYLLA THẬT; start/end/cancel UI CÒN THIẾU |
+| Nghiệp vụ | CRUD, start/end/cancel, km từ GPS, ba loại alert đúng workflow | CRUD và lifecycle trip/đo km ĐÃ VIẾT; GPS_LOST CÒN THIẾU; CHƯA KIỂM CHỨNG SCYLLA |
+| Frontend | Leaflet và các thao tác gọi API, role thật, không in-memory giả | UI start/end/cancel ĐÃ VIẾT; CHƯA CHẠY VỚI SCYLLA THẬT/BROWSER E2E |
 | COPY + restore | Dừng writer, export đủ 15 bảng, import kiểu đúng, count và mẫu dòng khớp | CHƯA KIỂM CHỨNG |
 | Demo/báo cáo | Theo rubric, ảnh/log thật; Word/PPT/source đủ, đúng định dạng | CHƯA HOÀN THIỆN |
 
@@ -70,11 +70,12 @@ Ghi lại phiên bản/container/datacenter thực tế thay vì chép kết qu�
 
 1. React prototype vẫn chỉ mô phỏng và không được đưa vào Docker runtime.
    Frontend tĩnh `frontend/` đã gọi API thật cho login/đọc dữ liệu/alert và
-   Admin tạo/đổi quyền/khóa user và form xe/tài xế/tạo trip PLANNED; mount dưới FastAPI.
-   Chưa chạy với Scylla, chưa có UI start/end/cancel trip.
-2. CRUD user/xe/tài xế đã viết nhưng chưa thử Scylla thật; chưa có start/end/cancel chuyến, chặn
-   chuyến đồng thời và gắn trip mới vào GPS. Hàm tính km có test nhưng chưa
-   nối với API kết thúc chuyến. Km của completed seed là fixture.
+   Admin tạo/đổi quyền/khóa user và form xe/tài xế/trip; mount dưới FastAPI.
+   Start/end/cancel UI đã gọi API nhưng chưa chạy với Scylla hoặc browser E2E.
+2. CRUD và vòng đời trip đã viết nhưng chưa thử Scylla thật. Mã chuyến đang
+   chạy được giữ trong latest row; một lock chỉ bảo vệ một backend worker.
+   Cần thử start → GPS → end, ba projection, km, retry/restart trên Scylla.
+   Km của completed seed vẫn là fixture, không được coi là kết quả API end.
    Xe mới được tạo geofence TP.HCM mặc định; chưa chỉnh bounding box từ UI.
    Trước khi khóa tài xế còn gắn xe, phải chuyển/gỡ phân công ở xe.
 3. Chưa có bộ quét GPS_LOST. Chống lặp alert hiện chỉ tra ngày hiện tại/trước đó;
@@ -84,6 +85,8 @@ Ghi lại phiên bản/container/datacenter thực tế thay vì chép kết qu�
    UUID ổn định và latest LWT không giải quyết mọi trường hợp lỗi một phần.
 5. Batch nhỏ đồng bộ một nghiệp vụ không tạo isolation hay FK. Tạo trip bằng
    read-before-write chưa chống được mọi race.
+   Start/end trip dùng lock một tiến trình; không hỗ trợ nhiều API worker
+   cùng ghi cho một xe nếu chưa thêm claim trạng thái ở CSDL.
 6. History dùng offset giới hạn; dữ liệu mới chen vào giữa các trang có thể
    làm offset dịch chuyển. Chỉ hỗ trợ tối đa 7 ngày mỗi request.
 7. Seed cùng ngày không nhân đôi GPS nhưng sẽ upsert các fixture nghiệp vụ.

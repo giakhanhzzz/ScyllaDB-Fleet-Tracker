@@ -38,6 +38,7 @@ function formatTime(value) {
   return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString("vi-VN", {timeZone: "Asia/Ho_Chi_Minh"});
 }
 function validPoint(point) {
+  if (point.lat == null || point.lng == null) return false;
   const lat = Number(point.lat), lng = Number(point.lng);
   return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
 }
@@ -314,10 +315,41 @@ function renderSimpleList(containerId, rows, describe, emptyText) {
 async function loadTrips() {
   const rows = await api("/api/fleet/trips?trip_date=" + encodeURIComponent(byId("trip-date").value));
   setText("trip-count", rows.length);
-  renderSimpleList("trip-list", rows, (row) => [
-    row.trip_id + " · " + row.status,
-    row.vehicle_id + " · " + row.origin + " → " + row.destination + " · " + formatTime(row.start_time)
-  ], "Không có chuyến trong ngày đã chọn.");
+  const list = byId("trip-list");
+  list.replaceChildren();
+  if (!rows.length) list.append(element("p", "muted", "Không có chuyến trong ngày đã chọn."));
+  for (const row of rows) {
+    const item = element("div", "item");
+    item.append(element("strong", "", row.trip_id + " · " + row.status));
+    item.append(element("small", "", row.vehicle_id + " / " + row.driver_id + " · " +
+      row.origin + " → " + row.destination + " · " + formatTime(row.start_time) +
+      (row.status === "COMPLETED" ? " · " + Number(row.distance_km || 0).toFixed(2) + " km" : "")));
+    if (canWrite() && (row.status === "PLANNED" || row.status === "IN_PROGRESS")) {
+      const actions = element("div", "item-actions");
+      for (const [action, label] of row.status === "PLANNED"
+        ? [["start", "Bắt đầu"], ["cancel", "Hủy"]]
+        : [["end", "Kết thúc"], ["cancel", "Hủy"]]) {
+        const button = element("button", "", label);
+        button.type = "button";
+        button.addEventListener("click", async () => {
+          if (action !== "start" && !window.confirm(label + " chuyến " + row.trip_id + "?")) return;
+          button.disabled = true;
+          try {
+            const result = await api("/api/fleet/trips/" + encodeURIComponent(row.trip_id) + "/" + action, {method: "POST"});
+            if (action === "start") byId("trip-date").value = utcToday();
+            await Promise.all([loadTrips(), refreshLatest()]);
+            message(action === "end" ? "Đã kết thúc: " + result.distance_km + " km." : "Đã cập nhật chuyến " + row.trip_id + ".");
+          } catch (error) {
+            report(error);
+            button.disabled = false;
+          }
+        });
+        actions.append(button);
+      }
+      item.append(actions);
+    }
+    list.append(item);
+  }
 }
 async function loadAlerts() {
   const rows = await api("/api/tracking/alerts?date_str=" + encodeURIComponent(byId("alert-date").value));

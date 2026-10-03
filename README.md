@@ -3,10 +3,10 @@
 Đồ án 14: Quản lý dữ liệu theo dõi vị trí phương tiện vận tải và lịch sử hành trình của đội xe.
 Nhóm: Phạm Gia Khánh, Trà Ngọc Nguyên Vũ, Lê Hữu Luân.
 
-## Trạng thái thực tế — 03/10/2026
+## Trạng thái thực tế — 04/10/2026
 
-Source chính đã push lên GitHub `main` tại commit `1e7e5fb` ngày
-03/10/2026. Commit gốc là `0c0c04d`; bản sửa nền tảng là `1c7d9e4`.
+Source chính được quản lý trên GitHub `main`; commit gốc là `0c0c04d`,
+bản sửa nền tảng là `1c7d9e4`.
 Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa được gọi là đồ án hoàn chỉnh.
 
 | Thành phần | Hiện có | Còn thiếu/chưa xác minh |
@@ -14,10 +14,10 @@ Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa đư�
 | Hạ tầng | Compose một Scylla node; profile demo cho API/simulator | Docker/CQL/volume thực tế |
 | CSDL | 15 bảng query-first, Q1–Q14; TTL GPS 90 ngày, activity 48 giờ | Thực thi schema/truy vấn trên Scylla và GUI |
 | Seed | 3 user, 10 xe, 8 tài xế, 20 chuyến, 3.200 GPS, 1 cảnh báo mẫu | Nạp vào CSDL thật; km chuyến hoàn tất là số liệu fixture |
-| API | Đăng nhập; Admin tạo/sửa/khóa user; Dispatcher/Admin tạo/sửa/ngừng xe, tài xế; đọc/tạo chuyến; ingest/lịch sử/latest, cảnh báo, thống kê | Start/end/cancel trip; tính km khi kết thúc; GPS_LOST; chưa chạy Scylla thật |
+| API | Đăng nhập; Admin tạo/sửa/khóa user; Dispatcher/Admin quản lý xe, tài xế, chuyến PLANNED → IN_PROGRESS → COMPLETED/CANCELLED; GPS gắn trip và tính km khi kết thúc; lịch sử/latest, cảnh báo, thống kê | GPS_LOST; chưa chạy Scylla thật |
 | Backup/restore | Script COPY CSV 15 bảng, kiểm đếm, xác nhận và backup an toàn | Chạy thử/đối chiếu thực tế; không phải snapshot SSTable |
-| Giao diện | Frontend tĩnh HTML/JS + Leaflet local trong `frontend/`; login, GPS, lịch sử, cảnh báo, form user/xe/tài xế và tạo chuyến PLANNED qua API | Chưa chạy cùng Scylla thật; UI start/end/cancel chuyến chưa có |
-| Kiểm thử | 41 test logic/API/static route đạt; Node kiểm tra cú pháp JS | Không thay thế integration test ScyllaDB hay browser E2E |
+| Giao diện | Frontend tĩnh HTML/JS + Leaflet local trong `frontend/`; login, GPS, lịch sử, cảnh báo, form user/xe/tài xế và thao tác vòng đời chuyến qua API | Chưa chạy cùng Scylla thật |
+| Kiểm thử | 50 test logic/API/static route đạt; Node kiểm tra cú pháp JS | Không thay thế integration test ScyllaDB hay browser E2E |
 
 ## Cấu trúc và nguyên tắc
 
@@ -74,6 +74,8 @@ Không commit `.env`, CSV backup hoặc dữ liệu người dùng thật.
   và tạo chuyến PLANNED qua `/api/fleet/*`. Vô hiệu xe/tài xế là cập nhật trạng thái, không xóa
   vật lý. Xe mới nhận geofence mặc định khu vực TP.HCM giống dữ liệu seed;
   chưa có giao diện chỉnh bounding box.
+  Tạo chuyến PLANNED rồi bấm Bắt đầu; GPS mới trong khoảng chạy được gắn
+  trip. Kết thúc tính km từ các điểm hợp lệ; Hủy không xóa dữ liệu lịch sử.
   Leaflet 1.9.4 và icon được lưu dưới
   `frontend/vendor/leaflet/` cùng LICENSE. Nền OpenStreetMap cần Internet;
   vị trí và polyline vẫn vẽ được nếu tile không tải.

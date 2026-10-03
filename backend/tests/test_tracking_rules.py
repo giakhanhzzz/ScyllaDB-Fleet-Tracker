@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.database import db
 from app.schemas import GPSIngest
 from app.services import calculate_trip_distance, check_geofence, haversine_km, row_to_dict
-from app.routes_tracking import ingest_gps, get_vehicle_history
+from app.routes_tracking import ingest_gps, get_vehicle_history, get_latest_locations
 
 class Rows(list):
     def one(self):
@@ -53,6 +53,12 @@ class TrackingTests(unittest.TestCase):
         values = row_to_dict(row)
         self.assertEqual(values["event_time"].isoformat(),"2026-09-28T12:00:00+00:00")
         self.assertEqual(values["event_date"],"2026-09-28")
+
+    def test_active_trip_marker_without_gps_is_not_a_map_point(self):
+        marker = SimpleNamespace(event_time=None,trip_id="T")
+        with patch.dict(db.prepared_statements, {"latest_locations": "LATEST"}), \
+             patch.object(db,"execute",return_value=Rows([marker])):
+            self.assertEqual(get_latest_locations({"company_id":"C"}),[])
 
     def test_distance_sorts_and_rejects_zero_time_and_outlier(self):
         start = datetime(2026,9,28,tzinfo=timezone.utc)
@@ -93,6 +99,53 @@ class TrackingTests(unittest.TestCase):
         self.assertFalse(result["latest_updated"])
         self.assertFalse(any(sql.startswith("UPDATE latest_locations") for sql in calls))
         self.assertTrue(any(sql.startswith("INSERT INTO location_events") for sql in calls))
+
+    def test_first_gps_after_trip_start_fills_marker_without_zero_point(self):
+        req = GPSIngest(**self.payload())
+        vehicle = SimpleNamespace(vehicle_id="V",company_id="C",status="RUNNING",speed_limit=80)
+        marker = SimpleNamespace(event_time=None,trip_id="T")
+        trip = SimpleNamespace(company_id="C",vehicle_id="V",status="IN_PROGRESS",
+                               start_time=req.timestamp - timedelta(seconds=1))
+        writes = []
+        def execute(sql, params=()):
+            if isinstance(sql, str) and sql.startswith("SELECT * FROM vehicles_by_id"):
+                return Rows([vehicle])
+            if isinstance(sql, str) and sql.startswith("SELECT * FROM latest_locations"):
+                return Rows([marker])
+            if isinstance(sql, str) and "FROM trips_by_id" in sql:
+                return Rows([trip])
+            writes.append((sql,params))
+            return Rows()
+        with patch.object(db,"execute",side_effect=execute):
+            result = ingest_gps(req,{"company_id":"C"})
+        self.assertTrue(result["latest_updated"])
+        gps = next(params for sql,params in writes if sql.startswith("INSERT INTO location_events"))
+        self.assertEqual(gps[-2],"T")
+        latest = next(params for sql,params in writes if sql.startswith("UPDATE latest_locations"))
+        self.assertEqual(latest[5],"T")
+
+    def test_late_gps_before_trip_start_does_not_join_trip(self):
+        req = GPSIngest(**self.payload())
+        vehicle = SimpleNamespace(vehicle_id="V",company_id="C",status="RUNNING",speed_limit=80)
+        marker = SimpleNamespace(event_time=None,trip_id="T")
+        trip = SimpleNamespace(company_id="C",vehicle_id="V",status="IN_PROGRESS",
+                               start_time=req.timestamp + timedelta(seconds=1))
+        writes = []
+        def execute(sql, params=()):
+            if isinstance(sql, str) and sql.startswith("SELECT * FROM vehicles_by_id"):
+                return Rows([vehicle])
+            if isinstance(sql, str) and sql.startswith("SELECT * FROM latest_locations"):
+                return Rows([marker])
+            if isinstance(sql, str) and "FROM trips_by_id" in sql:
+                return Rows([trip])
+            writes.append((sql,params))
+            return Rows()
+        with patch.object(db,"execute",side_effect=execute):
+            ingest_gps(req,{"company_id":"C"})
+        gps = next(params for sql,params in writes if sql.startswith("INSERT INTO location_events"))
+        latest = next(params for sql,params in writes if sql.startswith("UPDATE latest_locations"))
+        self.assertIsNone(gps[-2])
+        self.assertEqual(latest[5],"T")
 
     def test_reused_event_id_cannot_change_timestamp(self):
         payload = self.payload()

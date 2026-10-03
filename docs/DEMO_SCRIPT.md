@@ -17,10 +17,10 @@ Không tuyên bố đạt 10/10 từ skeleton hoặc đổi role bằng nút tro
 3. **Vũ — backend**: khởi tạo bằng init_demo.ps1, đăng nhập ba tài khoản; Viewer
    đọc được, POST ingest bị 403, request không token bị 401. Tắt CSDL thì API
    không trả mock/PASS; kiểm tra dữ liệu đọc lại sau ingest.
-4. **Vũ — nghiệp vụ còn phải hoàn thiện**: CRUD user/xe/tài xế đã viết nhưng
-   phải chạy với Scylla thật; tạo/start/end/cancel chuyến,
-   liên kết GPS vào trip hiện hành; tính km từ GPS hợp lệ; overspeed/geofence/
-   mất tín hiệu, ACK/RESOLVE và chống lặp sau retry/restart.
+4. **Vũ — nghiệp vụ phải kiểm chứng**: CRUD và start/end/cancel chuyến đã
+   viết nhưng phải chạy với Scylla thật; đối chiếu GPS gắn trip, km lọc
+   điểm nhảy, ba projection và retry/restart. GPS_LOST còn phải viết;
+   overspeed/geofence/ACK/RESOLVE phải thử thực và chống lặp sau restart.
 5. **Luân — frontend còn phải hoàn thiện**: frontend tĩnh phục vụ từ FastAPI,
    login thật, Leaflet latest/history, bộ lọc, thao tác theo quyền. Không dùng
    thay đổi React state để giả thao tác CSDL.
@@ -48,8 +48,10 @@ TEST_EVIDENCE.md/Nhap.md và xử lý đúng phạm vi; không tick hoàn thành
 - Với Dispatcher: thêm tài xế, thêm xe gán tài xế, sửa trạng thái xe và thử
   khóa tài xế còn được gán (mong đợi 409). Xe mới dùng geofence TP.HCM mặc
   định; chỉnh vùng theo nghiệp vụ chưa có trong UI.
-- Tạo chuyến PLANNED bằng xe và tài xế đã gán; xem lại chuyến ở ngày UTC hiện
-  tại. Start/end/cancel vẫn là phần phải xây tiếp, chưa có màn hình demo.
+- Tạo chuyến PLANNED bằng xe và tài xế đã gán, bấm Bắt đầu, bật simulator,
+  xem GPS gắn mã chuyến, rồi Kết thúc và đối chiếu km trong cả ba bảng trip.
+  Nút Hủy cũng cần thử cho PLANNED/IN_PROGRESS. Đây là kịch bản cần chạy thực
+  với Scylla, chưa phải kết quả đã đạt.
 - Authorize Bearer token; GET xe/latest/history/chuyến theo ngày seed.
 - Bật simulator bằng `docker compose --profile demo up -d simulator`.
 - Trong GUI, đọc lại location/latest/alerts sau request thật.
