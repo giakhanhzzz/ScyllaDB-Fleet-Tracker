@@ -5,9 +5,8 @@ Nhóm: Phạm Gia Khánh, Trà Ngọc Nguyên Vũ, Lê Hữu Luân.
 
 ## Trạng thái thực tế — 03/10/2026
 
-Đã nhận source trên GitHub tại commit `0c0c04d6db970c44039f576481a2e2f228208fda`.
-Bản rà soát sửa lỗi nền tảng đã vào `main` local (`1c7d9e4`).
-Các thay đổi tiếp theo đang được phát triển và kiểm thử offline.
+Source chính đã push lên GitHub `main` tại commit `1e7e5fb` ngày
+03/10/2026. Commit gốc là `0c0c04d`; bản sửa nền tảng là `1c7d9e4`.
 Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa được gọi là đồ án hoàn chỉnh.
 
 | Thành phần | Hiện có | Còn thiếu/chưa xác minh |

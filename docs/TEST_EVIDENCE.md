@@ -21,9 +21,9 @@ bằng commit/ref GitHub, không đồng nghĩa các gate ScyllaDB đã đạt.
 - Docker/GUI/RAM trong báo cáo 14/09 là bằng chứng lịch sử, không phải hiện tại.
   Ngưỡng 4 GB RAM trống ở báo cáo cũ chưa có căn cứ nghiệm thu.
 - Ở lần rà soát 28/09: không cài GUI, không push, không chạy
-  TRUNCATE/DROP/restore/reset. Ngày 03/10 commit `1c7d9e4` đã fast-forward
-  vào main local; push public bị chặn vì commit chứa file ghi nhớ nội bộ, đang
-  chờ Khánh quyết định cách công bố. Không ghi GitHub đã nhận commit này.
+  TRUNCATE/DROP/restore/reset. Ngày 03/10 Khánh cho phép công khai file ghi
+  nhớ/quy định; `1c7d9e4` và `1e7e5fb` đã push lên GitHub main thành công.
+  Việc push source không phải bằng chứng chạy ScyllaDB thật.
 
 ## Đã chạy thực tế
 

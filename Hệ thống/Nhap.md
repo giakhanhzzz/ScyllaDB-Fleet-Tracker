@@ -175,3 +175,6 @@
 - `[ĐÃ CHỐT BỞI KHÁNH]` Repo public được phép chứa cả bốn file Hệ thống/
   ghi nhớ/quy định trong commit local. Quyết định này chỉ giải quyết phạm vi
   công bố source hiện tại, không cho phép đưa .env, backup hay dữ liệu thật lên.
+- `[ĐÃ XÁC MINH]` Sau quyết định trên, commit `1e7e5fb` chứa frontend/API/
+  test/tài liệu đã push thành công lên `origin/main` cùng commit nền tảng
+  `1c7d9e4`. Đây là phát hành mã nguồn, không phải nghiệm thu Scylla/GUI.
