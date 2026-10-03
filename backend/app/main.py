@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from app.database import db
 from app.routes_auth_users import router as auth_router
 from app.routes_fleet import router as fleet_router
@@ -24,3 +26,9 @@ def health_check():
     if not row:
         raise HTTPException(503, "ScyllaDB chưa sẵn sàng")
     return {"status": "healthy", "database": "connected", "release_version": row.release_version}
+
+# Source checkout: project/frontend. Docker image: /app/frontend.
+frontend_dir = Path(__file__).resolve().parents[1] / "frontend"
+if not frontend_dir.is_dir():
+    frontend_dir = Path(__file__).resolve().parents[2] / "frontend"
+app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")

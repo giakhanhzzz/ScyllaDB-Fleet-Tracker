@@ -3,11 +3,11 @@
 Đồ án 14: Quản lý dữ liệu theo dõi vị trí phương tiện vận tải và lịch sử hành trình của đội xe.
 Nhóm: Phạm Gia Khánh, Trà Ngọc Nguyên Vũ, Lê Hữu Luân.
 
-## Trạng thái thực tế — 28/09/2026
+## Trạng thái thực tế — 03/10/2026
 
 Đã nhận source trên GitHub tại commit `0c0c04d6db970c44039f576481a2e2f228208fda`.
-Bản rà soát sửa lỗi nền tảng được chuẩn bị từ nhánh `codex/fix-demo-foundation`;
-Khánh đã yêu cầu nhập bản sửa vào `main`.
+Bản rà soát sửa lỗi nền tảng đã vào `main` local (`1c7d9e4`).
+Các thay đổi tiếp theo đang được phát triển và kiểm thử offline.
 Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa được gọi là đồ án hoàn chỉnh.
 
 | Thành phần | Hiện có | Còn thiếu/chưa xác minh |
@@ -15,10 +15,10 @@ Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa đư�
 | Hạ tầng | Compose một Scylla node; profile demo cho API/simulator | Docker/CQL/volume thực tế |
 | CSDL | 15 bảng query-first, Q1–Q14; TTL GPS 90 ngày, activity 48 giờ | Thực thi schema/truy vấn trên Scylla và GUI |
 | Seed | 3 user, 10 xe, 8 tài xế, 20 chuyến, 3.200 GPS, 1 cảnh báo mẫu | Nạp vào CSDL thật; km chuyến hoàn tất là số liệu fixture |
-| API | Đăng nhập, đọc user/xe/tài xế/chuyến; tạo chuyến; ingest/lịch sử/latest, xe di chuyển, xử lý cảnh báo, thống kê | CRUD đầy đủ; start/end/cancel chuyến; nối tính km khi kết thúc; GPS_LOST |
+| API | Đăng nhập; Admin tạo/sửa/khóa user; Dispatcher/Admin tạo/sửa/ngừng xe, tài xế; đọc/tạo chuyến; ingest/lịch sử/latest, cảnh báo, thống kê | Start/end/cancel trip; tính km khi kết thúc; GPS_LOST; chưa chạy Scylla thật |
 | Backup/restore | Script COPY CSV 15 bảng, kiểm đếm, xác nhận và backup an toàn | Chạy thử/đối chiếu thực tế; không phải snapshot SSTable |
-| Giao diện | React prototype trong `src/`, đã gắn nhãn mô phỏng | Frontend tĩnh theo kế hoạch và kết nối API thật |
-| Kiểm thử | 24 test logic/API đạt; Python AST, YAML cơ bản và PowerShell parser đạt | Không thay thế integration test ScyllaDB |
+| Giao diện | Frontend tĩnh HTML/JS + Leaflet local trong `frontend/`; login, GPS, lịch sử, cảnh báo, form user/xe/tài xế và tạo chuyến PLANNED qua API | Chưa chạy cùng Scylla thật; UI start/end/cancel chuyến chưa có |
+| Kiểm thử | 41 test logic/API/static route đạt; Node kiểm tra cú pháp JS | Không thay thế integration test ScyllaDB hay browser E2E |
 
 ## Cấu trúc và nguyên tắc
 
@@ -35,8 +35,8 @@ Không thay thế các file gốc bằng bản AI dựng lại.
 
 Runtime Docker không dùng React/Vite hay dịch vụ ngoài kế hoạch. Các file
 `src/`, `package.json`, `vite.config.ts`, `index.html` ở root là prototype
-Gemini cũ, chưa phải frontend cuối cùng. Giữ lại để tham khảo giao diện; không
-đánh dấu chức năng prototype là đã làm trên ScyllaDB.
+Gemini cũ, không phải frontend ứng dụng đang được Docker phục vụ. Giữ lại để
+tham khảo giao diện; không đánh dấu chức năng prototype là đã làm trên ScyllaDB.
 
 ## Kiểm chứng P1 trước
 
@@ -67,7 +67,17 @@ dừng writer trước seed, kiểm tra CQL, nạp schema/seed rồi bật backe
 Nếu `.env` đã tồn tại, tự kiểm tra `SECRET_KEY` có ít nhất 32 ký tự.
 Không commit `.env`, CSV backup hoặc dữ liệu người dùng thật.
 
-- API docs: `http://localhost:8000/docs`; health: `http://localhost:8000/health`.
+- Frontend thật: `http://localhost:8000/`; API docs: `http://localhost:8000/docs`;
+  health: `http://localhost:8000/api/health`.
+- Frontend dùng cùng origin, không đổi role giả, không lưu token bền trong
+  trình duyệt. Bản đồ/lịch sử đọc `/api/tracking/*`; alert ACK/RESOLVE dùng
+  API có kiểm quyền; Admin tạo/đổi quyền/khóa user qua `/api/users`; xe/tài xế
+  và tạo chuyến PLANNED qua `/api/fleet/*`. Vô hiệu xe/tài xế là cập nhật trạng thái, không xóa
+  vật lý. Xe mới nhận geofence mặc định khu vực TP.HCM giống dữ liệu seed;
+  chưa có giao diện chỉnh bounding box.
+  Leaflet 1.9.4 và icon được lưu dưới
+  `frontend/vendor/leaflet/` cùng LICENSE. Nền OpenStreetMap cần Internet;
+  vị trí và polyline vẫn vẽ được nếu tile không tải.
 - Tài khoản demo local: `khanh_admin`, `vu_dispatcher`, `luan_viewer`.
 - Mật khẩu demo chung: `Password123@`; không dùng ngoài môi trường local.
 - Seed mặc định ngày UTC `2026-09-28`, gồm ngày trước đó. Dùng đúng ngày này

@@ -20,26 +20,50 @@ class TokenResponse(BaseModel):
     company_id: str
 
 class UserCreate(RequestModel):
-    username: str
-    password: str
-    full_name: str
+    username: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=8, max_length=256)
+    full_name: str = Field(min_length=1, max_length=120)
     role: Literal["ADMIN", "DISPATCHER", "VIEWER"]
-    company_id: str
+
+class UserUpdate(RequestModel):
+    password: str | None = Field(default=None, min_length=8, max_length=256)
+    full_name: str | None = Field(default=None, min_length=1, max_length=120)
+    role: Literal["ADMIN", "DISPATCHER", "VIEWER"] | None = None
+    active: bool | None = None
 
 class VehicleCreate(RequestModel):
-    vehicle_id: str
-    plate: str
-    model: str
-    current_driver_id: Optional[str] = None
-    status: str = "IDLE"
+    vehicle_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    plate: str = Field(min_length=1, max_length=30)
+    model: str = Field(min_length=1, max_length=120)
+    current_driver_id: str | None = Field(default=None, min_length=1, max_length=80)
+    status: Literal["IDLE", "RUNNING", "MAINTENANCE", "INACTIVE"] = "IDLE"
     speed_limit: float = Field(default=80, gt=0, le=200)
 
+class VehicleUpdate(RequestModel):
+    plate: str | None = Field(default=None, min_length=1, max_length=30)
+    model: str | None = Field(default=None, min_length=1, max_length=120)
+    current_driver_id: str | None = Field(default=None, min_length=1, max_length=80)
+    status: Literal["IDLE", "RUNNING", "MAINTENANCE", "INACTIVE"] | None = None
+    speed_limit: float | None = Field(default=None, gt=0, le=200)
+
+class DriverCreate(RequestModel):
+    driver_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    full_name: str = Field(min_length=1, max_length=120)
+    license_number: str = Field(min_length=1, max_length=80)
+    phone: str = Field(min_length=1, max_length=32)
+
+class DriverUpdate(RequestModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=120)
+    license_number: str | None = Field(default=None, min_length=1, max_length=80)
+    phone: str | None = Field(default=None, min_length=1, max_length=32)
+    active: bool | None = None
+
 class TripCreate(RequestModel):
-    trip_id: str
-    vehicle_id: str
-    driver_id: str
-    origin: str
-    destination: str
+    trip_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
+    vehicle_id: str = Field(min_length=1, max_length=80)
+    driver_id: str = Field(min_length=1, max_length=80)
+    origin: str = Field(min_length=1, max_length=200)
+    destination: str = Field(min_length=1, max_length=200)
     start_time: Optional[datetime] = None
 
     @field_validator("start_time")

@@ -4,6 +4,8 @@
 
 API/script đang có mã nguồn và test logic; chưa chạy Scylla thật.
 UI React là prototype mô phỏng, không dùng để chứng minh CRUD, role hay backup.
+Frontend tĩnh `frontend/` đã gọi API nhưng vẫn cần chạy cùng Scylla thật trước
+khi dùng làm bằng chứng trình diễn.
 Không tuyên bố đạt 10/10 từ skeleton hoặc đổi role bằng nút trong UI.
 
 ## Gate theo thứ tự
@@ -15,7 +17,8 @@ Không tuyên bố đạt 10/10 từ skeleton hoặc đổi role bằng nút tro
 3. **Vũ — backend**: khởi tạo bằng init_demo.ps1, đăng nhập ba tài khoản; Viewer
    đọc được, POST ingest bị 403, request không token bị 401. Tắt CSDL thì API
    không trả mock/PASS; kiểm tra dữ liệu đọc lại sau ingest.
-4. **Vũ — nghiệp vụ còn phải hoàn thiện**: CRUD; tạo/start/end/cancel chuyến,
+4. **Vũ — nghiệp vụ còn phải hoàn thiện**: CRUD user/xe/tài xế đã viết nhưng
+   phải chạy với Scylla thật; tạo/start/end/cancel chuyến,
    liên kết GPS vào trip hiện hành; tính km từ GPS hợp lệ; overspeed/geofence/
    mất tín hiệu, ACK/RESOLVE và chống lặp sau retry/restart.
 5. **Luân — frontend còn phải hoàn thiện**: frontend tĩnh phục vụ từ FastAPI,
@@ -40,6 +43,13 @@ TEST_EVIDENCE.md/Nhap.md và xử lý đúng phạm vi; không tick hoàn thành
 
 - Chạy `./scripts/init_demo.ps1`, mở `http://localhost:8000/docs`.
 - Login khanh_admin/vu_dispatcher/luan_viewer với Password123@ (demo local).
+- Với Admin: tạo một Viewer mới, đổi role/khóa; tài khoản bị khóa không thể
+  dùng token cũ. Đây là bước cần chạy thực tế, chưa được tick bằng test fake.
+- Với Dispatcher: thêm tài xế, thêm xe gán tài xế, sửa trạng thái xe và thử
+  khóa tài xế còn được gán (mong đợi 409). Xe mới dùng geofence TP.HCM mặc
+  định; chỉnh vùng theo nghiệp vụ chưa có trong UI.
+- Tạo chuyến PLANNED bằng xe và tài xế đã gán; xem lại chuyến ở ngày UTC hiện
+  tại. Start/end/cancel vẫn là phần phải xây tiếp, chưa có màn hình demo.
 - Authorize Bearer token; GET xe/latest/history/chuyến theo ngày seed.
 - Bật simulator bằng `docker compose --profile demo up -d simulator`.
 - Trong GUI, đọc lại location/latest/alerts sau request thật.

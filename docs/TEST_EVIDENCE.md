@@ -1,5 +1,8 @@
 # Bằng chứng kiểm thử và gate nghiệm thu
 
+Bổ sung 03/10/2026: bản frontend tĩnh được viết trong workspace local; các gate
+ScyllaDB thật bên dưới vẫn CHƯA KIỂM CHỨNG.
+
 ## Nguồn và môi trường — 28/09/2026
 
 Source GitHub đã tải được; commit gốc:
@@ -17,13 +20,18 @@ bằng commit/ref GitHub, không đồng nghĩa các gate ScyllaDB đã đạt.
   mới; không ghi 0 MB, không dùng số đo cũ làm hiện trạng.
 - Docker/GUI/RAM trong báo cáo 14/09 là bằng chứng lịch sử, không phải hiện tại.
   Ngưỡng 4 GB RAM trống ở báo cáo cũ chưa có căn cứ nghiệm thu.
-- Không cài GUI, không push, không chạy TRUNCATE/DROP/restore/reset khi rà soát.
+- Ở lần rà soát 28/09: không cài GUI, không push, không chạy
+  TRUNCATE/DROP/restore/reset. Ngày 03/10 commit `1c7d9e4` đã fast-forward
+  vào main local; push public bị chặn vì commit chứa file ghi nhớ nội bộ, đang
+  chờ Khánh quyết định cách công bố. Không ghi GitHub đã nhận commit này.
 
 ## Đã chạy thực tế
 
 | Kiểm tra | Kết quả | Giới hạn |
 | --- | --- | --- |
-| `python -m unittest discover -s backend/tests -q` | PASS — 24 tests, OK | DB giả lập; không có Scylla server |
+| `python -m unittest discover -s backend/tests -q` | PASS — 41 tests, OK (03/10) | DB giả lập; không có Scylla server |
+| `node --check frontend/app.js` | PASS (03/10) | Chỉ cú pháp JS, chưa phải browser E2E |
+| GET `/`, `/app.js`, `/styles.css`, Leaflet asset bằng TestClient | PASS (03/10) | TestClient không chạy lifespan/Scylla; frontend khác React prototype |
 | Python `ast.parse` cho source backend/database/scripts/simulator | PASS — 15 file | Cú pháp, không phải hành vi CQL |
 | `yaml.safe_load` + kiểm tra service/profile | PASS | Không thay cho `docker compose config` |
 | PowerShell Parser cho 4 script .ps1 | PASS — 0 lỗi parse | Chưa thực thi Docker/backup |
@@ -50,8 +58,8 @@ source test. Không dùng các kết quả này để tick CQL, integration hay 
 | P2 Model/query | 15 bảng, đúng PK/clustering/TTL, Q1–Q14 chạy được không ALLOW FILTERING | CHƯA KIỂM CHỨNG |
 | P3 Seed | 3 user, 10 xe, 8 tài xế, 20 chuyến, 3.200 GPS; chạy lại đối chiếu count | CHƯA KIỂM CHỨNG |
 | API integration | Đăng nhập, Viewer 403, ingest đọc lại CQL/latest, restart vẫn có dữ liệu | CHƯA KIỂM CHỨNG |
-| Nghiệp vụ | CRUD, start/end/cancel, km từ GPS, ba loại alert đúng workflow | CHƯA HOÀN THIỆN |
-| Frontend | Leaflet và các thao tác gọi API, role thật, không in-memory giả | CHƯA HOÀN THIỆN |
+| Nghiệp vụ | CRUD, start/end/cancel, km từ GPS, ba loại alert đúng workflow | CRUD user/xe/tài xế + tạo trip PLANNED ĐÃ VIẾT; lifecycle/ALERT CÒN THIẾU; CHƯA KIỂM CHỨNG SCYLLA |
+| Frontend | Leaflet và các thao tác gọi API, role thật, không in-memory giả | ĐÃ VIẾT/MOUNT STATIC; CHƯA CHẠY VỚI SCYLLA THẬT; start/end/cancel UI CÒN THIẾU |
 | COPY + restore | Dừng writer, export đủ 15 bảng, import kiểu đúng, count và mẫu dòng khớp | CHƯA KIỂM CHỨNG |
 | Demo/báo cáo | Theo rubric, ảnh/log thật; Word/PPT/source đủ, đúng định dạng | CHƯA HOÀN THIỆN |
 
@@ -60,11 +68,15 @@ Ghi lại phiên bản/container/datacenter thực tế thay vì chép kết qu�
 
 ## Nợ còn lại, không che bằng mock
 
-1. React prototype chưa gọi FastAPI. Chưa có frontend tĩnh trong `frontend/`
-   theo kế hoạch. React không được đưa vào Docker runtime.
-2. Chưa đủ CRUD user/xe/tài xế/chuyến; chưa có start/end/cancel chuyến, chặn
+1. React prototype vẫn chỉ mô phỏng và không được đưa vào Docker runtime.
+   Frontend tĩnh `frontend/` đã gọi API thật cho login/đọc dữ liệu/alert và
+   Admin tạo/đổi quyền/khóa user và form xe/tài xế/tạo trip PLANNED; mount dưới FastAPI.
+   Chưa chạy với Scylla, chưa có UI start/end/cancel trip.
+2. CRUD user/xe/tài xế đã viết nhưng chưa thử Scylla thật; chưa có start/end/cancel chuyến, chặn
    chuyến đồng thời và gắn trip mới vào GPS. Hàm tính km có test nhưng chưa
    nối với API kết thúc chuyến. Km của completed seed là fixture.
+   Xe mới được tạo geofence TP.HCM mặc định; chưa chỉnh bounding box từ UI.
+   Trước khi khóa tài xế còn gắn xe, phải chuyển/gỡ phân công ở xe.
 3. Chưa có bộ quét GPS_LOST. Chống lặp alert hiện chỉ tra ngày hiện tại/trước đó;
    trạng thái unresolved lâu hơn cần hoàn thiện trong phase cảnh báo.
 4. GPS ghi nhiều projection không phải transaction SQL. Retry sau lỗi từng

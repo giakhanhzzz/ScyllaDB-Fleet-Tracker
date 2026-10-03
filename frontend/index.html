@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ScyllaDB Fleet Tracker</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div><span class="logo">●</span> <strong>ScyllaDB Fleet Tracker</strong><small>Đội xe · vị trí · hành trình</small></div>
+    <div class="top-actions"><span id="connection" role="status">Chưa đăng nhập</span><span id="identity"></span><button id="logout" type="button" hidden>Đăng xuất</button></div>
+  </header>
+
+  <main id="login-view" class="login-shell">
+    <section class="login-card">
+      <p class="eyebrow">ĐỒ ÁN NOSQL · DEMO LOCAL</p>
+      <h1>Theo dõi đội xe</h1>
+      <p>Đăng nhập để xem dữ liệu được đọc trực tiếp qua FastAPI và ScyllaDB.</p>
+      <form id="login-form">
+        <label for="username">Tên đăng nhập</label>
+        <input id="username" name="username" autocomplete="username" required>
+        <label for="password">Mật khẩu</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Đăng nhập</button>
+      </form>
+      <p id="login-message" class="message" role="alert"></p>
+      <p class="hint">Tài khoản seed được mô tả trong README. Giao diện này không sử dụng dữ liệu mô phỏng trong trình duyệt.</p>
+    </section>
+  </main>
+
+  <main id="dashboard" class="dashboard" hidden>
+    <div class="notice" id="message" role="status"></div>
+    <section class="metrics" aria-label="Tổng quan">
+      <article><small>Phương tiện</small><strong id="vehicle-count">—</strong></article>
+      <article><small>Đang di chuyển</small><strong id="moving-count">—</strong></article>
+      <article><small>Tài xế</small><strong id="driver-count">—</strong></article>
+      <article><small>Chuyến trong ngày chọn</small><strong id="trip-count">—</strong></article>
+    </section>
+
+    <section class="workspace">
+      <aside class="panel fleet-panel">
+        <div class="panel-heading"><div><p class="eyebrow">ĐỘI XE</p><h2>Phương tiện</h2></div><div class="inline-actions"><button id="vehicle-edit" type="button" hidden disabled>Sửa xe</button><button id="refresh" type="button">Làm mới</button></div></div>
+        <label for="status-filter">Trạng thái</label>
+        <select id="status-filter">
+          <option value="">Tất cả</option>
+          <option value="RUNNING">Đang chạy</option>
+          <option value="IDLE">Đang nghỉ</option>
+          <option value="MAINTENANCE">Bảo trì</option>
+          <option value="INACTIVE">Ngừng hoạt động</option>
+        </select>
+        <div id="vehicle-list" class="vehicle-list" aria-live="polite"></div>
+        <details id="vehicle-admin" class="editor" hidden>
+          <summary>Thêm / sửa xe</summary>
+          <form id="vehicle-form" class="admin-form">
+            <label for="vehicle-id">Mã xe</label><input id="vehicle-id" required maxlength="80" pattern="[A-Za-z0-9_.-]+">
+            <label for="vehicle-plate">Biển số</label><input id="vehicle-plate" required maxlength="30">
+            <label for="vehicle-model">Mẫu xe</label><input id="vehicle-model" required maxlength="120">
+            <label for="vehicle-driver">Tài xế</label><select id="vehicle-driver"><option value="">Chưa gán</option></select>
+            <label for="vehicle-status">Trạng thái</label><select id="vehicle-status">
+              <option value="IDLE">Đang nghỉ</option><option value="RUNNING">Đang chạy</option>
+              <option value="MAINTENANCE">Bảo trì</option><option value="INACTIVE">Ngừng hoạt động</option>
+            </select>
+            <label for="vehicle-speed">Giới hạn km/h</label><input id="vehicle-speed" type="number" required min="1" max="200" step="0.1" value="80">
+            <div class="inline-actions"><button type="submit">Lưu xe</button><button id="vehicle-new" type="button">Tạo xe mới</button></div>
+          </form>
+        </details>
+      </aside>
+      <div class="main-column">
+        <section class="panel map-panel">
+          <div class="panel-heading"><div><p class="eyebrow">GPS HIỆN TẠI</p><h2>Bản đồ vị trí</h2></div><small id="map-summary">Chọn xe để xem lịch sử</small></div>
+          <div id="map" role="img" aria-label="Bản đồ vị trí đội xe"></div>
+          <p class="map-note">Nền bản đồ cần Internet; vị trí và tuyến hành trình vẫn vẽ được khi mất tile.</p>
+        </section>
+        <section class="panel history-panel">
+          <div class="panel-heading"><div><p class="eyebrow">TIME-SERIES</p><h2>Lịch sử hành trình</h2></div><span id="selected-vehicle">Chưa chọn xe</span></div>
+          <div class="controls"><label for="history-date">Ngày UTC</label><input id="history-date" type="date"><button id="history-load" type="button" disabled>Đọc GPS</button></div>
+          <p id="history-summary" class="muted">Chọn một xe ở danh sách hoặc trên bản đồ.</p>
+          <div id="history-list" class="compact-list"></div>
+          <button id="history-more" type="button" hidden>Tải thêm GPS</button>
+        </section>
+      </div>
+    </section>
+
+    <section class="lower-grid">
+      <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">NGHIỆP VỤ</p><h2>Chuyến đi</h2></div><input id="trip-date" type="date" aria-label="Ngày chuyến đi UTC"></div>
+        <div id="trip-list" class="compact-list"></div>
+        <details id="trip-admin" class="editor" hidden>
+          <summary>Tạo chuyến kế hoạch</summary>
+          <form id="trip-form" class="admin-form">
+            <label for="trip-id">Mã chuyến</label><input id="trip-id" required maxlength="80" pattern="[A-Za-z0-9_.-]+">
+            <label for="trip-vehicle">Xe</label><select id="trip-vehicle" required></select>
+            <label for="trip-driver">Tài xế đã gán</label><select id="trip-driver" required></select>
+            <label for="trip-origin">Điểm đi</label><input id="trip-origin" required maxlength="200">
+            <label for="trip-destination">Điểm đến</label><input id="trip-destination" required maxlength="200">
+            <button type="submit">Tạo chuyến PLANNED</button>
+          </form>
+        </details>
+      </article>
+      <article class="panel"><div class="panel-heading"><div><p class="eyebrow">AN TOÀN</p><h2>Cảnh báo</h2></div><input id="alert-date" type="date" aria-label="Ngày cảnh báo UTC"></div><div id="alert-list" class="compact-list"></div></article>
+      <article class="panel">
+        <div class="panel-heading"><div><p class="eyebrow">NHÂN SỰ</p><h2>Tài xế</h2></div></div>
+        <div id="driver-list" class="compact-list"></div>
+        <details id="driver-admin" class="editor" hidden>
+          <summary>Thêm / sửa tài xế</summary>
+          <form id="driver-form" class="admin-form">
+            <label for="driver-id">Mã tài xế</label><input id="driver-id" required maxlength="80" pattern="[A-Za-z0-9_.-]+">
+            <label for="driver-name">Họ tên</label><input id="driver-name" required maxlength="120">
+            <label for="driver-license">Giấy phép</label><input id="driver-license" required maxlength="80">
+            <label for="driver-phone">Điện thoại</label><input id="driver-phone" type="tel" required maxlength="32">
+            <div class="inline-actions"><button type="submit">Lưu tài xế</button><button id="driver-new" type="button">Tạo mới</button></div>
+          </form>
+        </details>
+      </article>
+      <article class="panel" id="users-panel" hidden>
+        <div class="panel-heading"><div><p class="eyebrow">ADMIN</p><h2>Người dùng</h2></div></div>
+        <div id="user-list" class="compact-list"></div>
+        <form id="user-form" class="admin-form">
+          <h3>Thêm tài khoản</h3>
+          <label for="new-username">Tên đăng nhập</label><input id="new-username" required minlength="1" maxlength="80" pattern="[A-Za-z0-9_.-]+">
+          <label for="new-fullname">Họ tên</label><input id="new-fullname" required maxlength="120">
+          <label for="new-password">Mật khẩu</label><input id="new-password" type="password" required minlength="8" autocomplete="new-password">
+          <label for="new-role">Vai trò</label>
+          <select id="new-role"><option value="VIEWER">Viewer</option><option value="DISPATCHER">Dispatcher</option><option value="ADMIN">Admin</option></select>
+          <button type="submit">Tạo tài khoản</button>
+        </form>
+      </article>
+    </section>
+  </main>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

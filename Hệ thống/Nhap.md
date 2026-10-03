@@ -122,3 +122,56 @@
 - `[CẦN NHỚ]` Bản trên main vẫn là nền tảng đã sửa lỗi, chưa phải demo hoàn
   chỉnh. Các gate Docker/Scylla/GUI/backup thực tế và chức năng còn thiếu giữ
   nguyên trong TEST_EVIDENCE; không tự tick PASS khi phát hành mã nguồn.
+
+### 2026-10-03 — Main local và lát cắt frontend thật
+
+- `[ĐÃ XÁC MINH]` origin/main vẫn ở 0c0c04d trước lần bàn giao; commit sửa lỗi
+  1c7d9e4 đã vào main local bằng fast-forward, không force. Push bị bộ kiểm
+  duyệt an toàn chặn vì repo public và commit chứa file ghi nhớ/quy định nội bộ.
+  Không được tuyên bố mã mới đã lên GitHub; đã hỏi Khánh chọn giữ private hay
+  cho công khai, không lách chặn.
+- `[ĐÃ VIẾT - CHƯA TÍCH HỢP SCYLLA]` Frontend tĩnh HTML/CSS/JS theo kế hoạch,
+  FastAPI phục vụ tại /; Leaflet 1.9.4 tải từ package npm chính thức và lưu
+  cục bộ kèm LICENSE/icons. Login dùng /api/auth/login + /api/auth/me thật,
+  danh sách xe/tài xế/chuyến/cảnh báo và GPS/latest/history qua API; Viewer
+  không có nút cập nhật alert. React cũ vẫn được gắn nhãn prototype.
+- `[ĐÃ XÁC MINH]` TestClient GET / và static assets chạy, API không bị static
+  che; tổng 26 unit/API tests đạt với DB fake, gồm Viewer 403 khi xử lý alert.
+  node --check app.js đạt.
+  Không có Docker CLI/Scylla kết nối trong phiên này; chưa có browser E2E.
+- `[CÒN THIẾU]` Frontend CRUD đầy đủ, vòng đời trip, cảnh báo GPS_LOST,
+  kiểm chứng CQL/GUI/backup và demo tích hợp thật. Lát cắt hiện tại chỉ
+  là xem dữ liệu + xử lý alert qua backend đã có, chưa là phase P7 PASS.
+- `[ĐÃ VIẾT - CHƯA TÍCH HỢP SCYLLA]` P4 quản trị user: Admin tạo tài khoản
+  trong công ty hiện tại, đổi role/active/password/full_name; ghi cả bảng
+  users_by_username và users_by_company. Client không truyền company_id,
+  không cho Admin tự khóa/bỏ quyền. UI có form tạo/đổi role/khóa cho Admin.
+- `[ĐÃ XÁC MINH]` 32 test fake-DB/API đạt, gồm Viewer 403, công ty giả bị
+  từ chối, user khác công ty 404, self-lock 409 và hai projection được ghi.
+  Vẫn cần kiểm chứng batch CQL thật, đăng nhập user mới và vô hiệu token sau
+  khóa trên Scylla trước khi nghiệm thu.
+- `[ĐÃ VIẾT - CHƯA TÍCH HỢP SCYLLA]` P4 CRUD xe/tài xế: Admin và Dispatcher
+  tạo, xem chi tiết, cập nhật, vô hiệu hóa mềm; cập nhật đủ bảng theo ID và
+  projection theo công ty/trạng thái. Đổi trạng thái xe xóa khóa cũ rồi insert
+  khóa mới trong logged batch; tạo xe đồng thời thêm geofence TP.HCM như seed.
+  Tài xế còn gắn xe không thể bị khóa; Viewer bị backend 403.
+- `[ĐÃ XÁC MINH]` Tổng 39 test fake-DB/API đạt, frontend có form user/xe/tài
+  xế, node --check app.js đạt. Chưa có Docker CLI/Scylla thật nên không tick
+  phase P4/P7. CQL batch, projection sau restart, geofence xe mới và UI cần
+  kiểm chứng bằng demo thật.
+- `[GIỚI HẠN]` Chống trùng ID vẫn là read-before-write, không CAS/isolation.
+  Kiểm tra xe gắn tài xế đọc 4 partition status của công ty; hợp demo 10 xe,
+  cần bảng tra theo tài xế nếu tăng quy mô. Bounding box geofence mặc định
+  chưa có API/UI chỉnh sửa.
+
+### 2026-10-03 — Tạo chuyến kế hoạch và quyết định công bố
+
+- `[ĐÃ VIẾT - CHƯA TÍCH HỢP SCYLLA]` Frontend tĩnh có form tạo trip PLANNED;
+  xe phải khả dụng, có tài xế đang active và được gán đúng xe. Backend kiểm
+  lại các điều kiện này, ghi ba projection trip theo batch. Chưa có start/end/
+  cancel hoặc liên kết GPS của trip mới.
+- `[ĐÃ XÁC MINH]` 41 test fake-DB/API đạt; node --check frontend/app.js đạt.
+  Không có bằng chứng CQL thực, UI browser E2E hay Scylla runtime.
+- `[ĐÃ CHỐT BỞI KHÁNH]` Repo public được phép chứa cả bốn file Hệ thống/
+  ghi nhớ/quy định trong commit local. Quyết định này chỉ giải quyết phạm vi
+  công bố source hiện tại, không cho phép đưa .env, backup hay dữ liệu thật lên.
