@@ -1,117 +1,135 @@
 # ScyllaDB Fleet Tracker
 
-> **Đồ án**: Hệ thống quản lý dữ liệu theo dõi vị trí phương tiện vận tải và lịch sử hành trình của đội xe  
-> **Repository**: [https://github.com/giakhanhzzz/ScyllaDB-Fleet-Tracker](https://github.com/giakhanhzzz/ScyllaDB-Fleet-Tracker)  
-> **Giai đoạn hiện tại**: **Phase 1 (P1) - Môi trường & Hạ tầng ScyllaDB**
+Đồ án 14: Quản lý dữ liệu theo dõi vị trí phương tiện vận tải và lịch sử hành trình của đội xe.
+Nhóm: Phạm Gia Khánh, Trà Ngọc Nguyên Vũ, Lê Hữu Luân.
 
----
+## Trạng thái thực tế — 28/09/2026
 
-## 1. Phân Công Thành Viên Nhóm
+Đã nhận source trên GitHub tại commit `0c0c04d6db970c44039f576481a2e2f228208fda`.
+Bản rà soát sửa lỗi nền tảng được chuẩn bị từ nhánh `codex/fix-demo-foundation`;
+Khánh đã yêu cầu nhập bản sửa vào `main`.
+Không có bằng chứng chạy trọn hệ thống với ScyllaDB; chưa được gọi là đồ án hoàn chỉnh.
 
-- **Phạm Gia Khánh**: Phụ trách dữ liệu (Data Modeling, Keyspace/Tables), môi trường hạ tầng (Docker/ScyllaDB), tích hợp hệ thống.
-- **Trà Ngọc Nguyên Vũ**: Phụ trách Backend (FastAPI), xác thực & phân quyền (RBAC), quy tắc nghiệp vụ (Trip, Alert).
-- **Lê Hữu Luân**: Phụ trách Frontend (HTML/CSS/JS + Leaflet), GPS Simulator, kịch bản demo.
+| Thành phần | Hiện có | Còn thiếu/chưa xác minh |
+| --- | --- | --- |
+| Hạ tầng | Compose một Scylla node; profile demo cho API/simulator | Docker/CQL/volume thực tế |
+| CSDL | 15 bảng query-first, Q1–Q14; TTL GPS 90 ngày, activity 48 giờ | Thực thi schema/truy vấn trên Scylla và GUI |
+| Seed | 3 user, 10 xe, 8 tài xế, 20 chuyến, 3.200 GPS, 1 cảnh báo mẫu | Nạp vào CSDL thật; km chuyến hoàn tất là số liệu fixture |
+| API | Đăng nhập, đọc user/xe/tài xế/chuyến; tạo chuyến; ingest/lịch sử/latest, xe di chuyển, xử lý cảnh báo, thống kê | CRUD đầy đủ; start/end/cancel chuyến; nối tính km khi kết thúc; GPS_LOST |
+| Backup/restore | Script COPY CSV 15 bảng, kiểm đếm, xác nhận và backup an toàn | Chạy thử/đối chiếu thực tế; không phải snapshot SSTable |
+| Giao diện | React prototype trong `src/`, đã gắn nhãn mô phỏng | Frontend tĩnh theo kế hoạch và kết nối API thật |
+| Kiểm thử | 24 test logic/API đạt; Python AST, YAML cơ bản và PowerShell parser đạt | Không thay thế integration test ScyllaDB |
 
----
+## Cấu trúc và nguyên tắc
 
-## 2. Mục Tiêu & Phạm Vi Phase 1 (P1)
+Kế hoạch gốc: `KE_HOACH_DO_AN_SCYLLADB.md`.
+`Hệ thống/` giữ quy định giảng viên, luật làm việc, kiến thức môn học và nhật ký.
+Không thay thế các file gốc bằng bản AI dựng lại.
 
-Phase 1 tập trung thiết lập và chuẩn hóa toàn bộ hạ tầng cơ sở dữ liệu ScyllaDB cục bộ:
-1. **Docker Compose**: Cấu hình ScyllaDB Single Node (phiên bản `5.4`), ánh xạ cổng `9042` (CQL) và `10000` (Management API), cấu hình Volume `scylla_fleet_data` lưu trữ dữ liệu bền vững, và Healthcheck tự động.
-2. **Tối ưu tài nguyên cho máy 8GB RAM**: Áp dụng các cờ ScyllaDB `--smp 1 --memory 1500M --overprovisioned 1` để đảm bảo hệ thống không bị tràn RAM hoặc quá tải CPU trên môi trường Windows Docker Desktop.
-3. **Script xác minh**: Cung cấp `scripts/wait_for_scylla.py` sử dụng `cassandra-driver` chính thức để kiểm tra tính sẵn sàng của port TCP 9042, CQL Native Protocol và truy vấn bảng metadata `system.local`.
-4. **Tài liệu hướng dẫn GUI**: Hướng dẫn kết nối công cụ quản trị trực quan **DBeaver Lite** và **TablePlus** qua giao thức Cassandra tại `docs/GUI_DBEAVER.md`.
-5. **Nhật ký kiểm thử**: Ghi nhận bằng chứng thực nghiệm tại `docs/TEST_EVIDENCE.md`.
+- `database/`: schema, truy vấn, seed, import/export.
+- `backend/app/`: FastAPI, driver Cassandra, bảo mật và nghiệp vụ.
+- `backend/tests/`: kiểm thử có DB giả lập rõ ràng.
+- `simulator/`: tiến trình gửi GPS qua API đã đăng nhập.
+- `scripts/`: khởi tạo, kiểm tra CQL, COPY backup/restore và reset có xác nhận.
+- `docs/`: GUI, kịch bản demo và bằng chứng kiểm thử.
 
----
+Runtime Docker không dùng React/Vite hay dịch vụ ngoài kế hoạch. Các file
+`src/`, `package.json`, `vite.config.ts`, `index.html` ở root là prototype
+Gemini cũ, chưa phải frontend cuối cùng. Giữ lại để tham khảo giao diện; không
+đánh dấu chức năng prototype là đã làm trên ScyllaDB.
 
-## 3. Cấu Trúc Thư Mục Hiện Tại (Phase 1)
+## Kiểm chứng P1 trước
 
-```
-scylladb-fleet-tracker/
-├── .env.example              # Cấu hình biến môi trường mẫu cho ScyllaDB và ứng dụng
-├── docker-compose.yml        # Docker Compose cấu hình ScyllaDB node, volume, healthcheck
-├── README.md                 # Tài liệu tổng quan và hướng dẫn chạy P1
-├── docs/
-│   ├── GUI_DBEAVER.md        # Hướng dẫn kết nối DBeaver Lite & TablePlus tới ScyllaDB
-│   └── TEST_EVIDENCE.md      # Nhật ký kiểm thử, kết quả chạy và trạng thái môi trường
-└── scripts/
-    └── wait_for_scylla.py    # Script Python kiểm tra kết nối ScyllaDB qua cassandra-driver
-```
+Chạy ở thư mục repo bằng PowerShell 7, trên máy có Docker Compose và Linux Engine:
 
----
-
-## 4. Hướng Dẫn Thực Thi Phase 1 Bằng PowerShell (Trên Máy Windows)
-
-### Bước 1: Khởi động Docker Desktop
-Đảm bảo phần mềm **Docker Desktop** đã được mở và biểu tượng trạng thái hiển thị **Docker Engine: Running**.
-
-### Bước 2: Khởi động ScyllaDB Node
-Mở PowerShell tại thư mục dự án và chạy:
 ```powershell
-# Khởi chạy ScyllaDB dưới dạng background daemon
-docker compose up -d
-
-# Xem log khởi động của ScyllaDB container
-docker compose logs -f scylla
+docker info
+docker compose config --quiet
+docker compose up -d --wait scylla
+docker compose exec -T scylla nodetool status
+docker compose exec -T scylla cqlsh -e "SELECT release_version FROM system.local;"
 ```
-*(Nhấn Ctrl+C để thoát khỏi màn hình logs sau khi thấy ScyllaDB đã hoàn tất khởi tạo).*
 
-### Bước 3: Kiểm tra trạng thái Cluster bằng `nodetool`
+Kết quả mong đợi: node UN, CQL đọc được metadata. Đây là hướng dẫn, không phải
+log PASS. Cần đo tài nguyên máy thực tế; không áp đặt ngưỡng 4 GB RAM trống chưa
+có căn cứ. Cổng CQL chỉ bind `127.0.0.1:9042`, không public API quản trị 10000.
+
+## Khởi tạo backend và dữ liệu mẫu
+
+Sau khi gate P1 đạt:
+
 ```powershell
-docker exec -it scylla-node nodetool status
+./scripts/init_demo.ps1
 ```
-*Kết quả mong đợi*: Dòng trạng thái hiển thị `UN` (**U**p / **N**ormal), Owns `100.0%`, Address `172.x.x.x`.
 
-### Bước 4: Kiểm tra kết nối CQL nội bộ bằng `cqlsh`
+Script tạo `.env` với khóa JWT ngẫu nhiên nếu chưa có, build image Python 3.11,
+dừng writer trước seed, kiểm tra CQL, nạp schema/seed rồi bật backend.
+Nếu `.env` đã tồn tại, tự kiểm tra `SECRET_KEY` có ít nhất 32 ký tự.
+Không commit `.env`, CSV backup hoặc dữ liệu người dùng thật.
+
+- API docs: `http://localhost:8000/docs`; health: `http://localhost:8000/health`.
+- Tài khoản demo local: `khanh_admin`, `vu_dispatcher`, `luan_viewer`.
+- Mật khẩu demo chung: `Password123@`; không dùng ngoài môi trường local.
+- Seed mặc định ngày UTC `2026-09-28`, gồm ngày trước đó. Dùng đúng ngày này
+  khi chạy các CQL mẫu; simulator tạo dữ liệu tại thời điểm hiện tại.
+- Chạy seed lại cùng ngày giữ nguyên primary key GPS. Đây không phải reset toàn
+  dữ liệu hay giữ nguyên trạng thái đã chỉnh sửa. Nếu đổi SEED_DATE, cần reset
+  có backup/xác nhận và điều chỉnh ngày trong truy vấn mẫu.
+
+Bật GPS giả lập sau khi API đã chạy:
+
 ```powershell
-docker exec -it scylla-node cqlsh -e "SHOW VERSION;"
+docker compose --profile demo up -d simulator
+docker compose --profile demo logs --tail 30 simulator
 ```
-*Kết quả mong đợi*: Hiển thị phiên bản `[cqlsh ... | Cassandra 3.0.8 | CQL spec 3.4.0 | Scylla release 5.4...]`.
 
-### Bước 5: Kiểm tra kết nối từ Python Host (`cassandra-driver`)
-Chạy bằng môi trường Python đã có cài `cassandra-driver` (ví dụ Laragon Python 3.13):
+Simulator gửi mỗi 3–5 giây, mặc định 4; dùng dispatcher JWT.
+GPS cần timestamp có timezone, UUID v1 cùng millisecond; company/trip không do
+client tùy ý gán. Backend lấy company từ user đang hoạt động trong CSDL.
+
+## Import/export và backup/restore
+
+`python` trên host chỉ cần thư viện chuẩn để gọi COPY trong container:
+
 ```powershell
-# Chạy script xác minh kết nối tự động
-python scripts/wait_for_scylla.py
+python database/import_export.py export vehicles_by_id ./vehicles.csv
+python database/import_export.py import vehicles_by_id ./vehicles.csv
+docker compose --profile demo stop simulator backend
+./scripts/backup.ps1
+./scripts/restore.ps1 -BackupDir "./docs/backups/<ten-ban-backup>"
 ```
-*Kết quả mong đợi*: Script in thông tin `Cluster Name`, `Release Version`, `Datacenter` và báo `[SUCCESS] Phase 1 da san sang 100%!`.
 
-### Bước 6: Kiểm tra kết nối GUI (DBeaver)
-- Thực hiện theo các bước chi tiết trong file `docs/GUI_DBEAVER.md`.
-- Kết nối tới `localhost:9042` bằng driver **Apache Cassandra**.
+Backup từ chối chạy khi backend/simulator đang hoạt động; đồng thời phải dừng
+các writer ngoài ứng dụng, kể cả GUI. Restore yêu cầu schema 15 bảng tương ứng
+đã tồn tại, hỏi gõ RESTORE, lưu dữ liệu hiện tại trước TRUNCATE và kiểm đếm đủ
+15 bảng trước bật backend lại. `schema.cql` trong backup là tài liệu khôi phục
+DDL, không tự apply lên keyspace đang có.
 
----
+COPY là backup logic: TTL được tính lại khi import; row count bằng nhau chưa
+chứng minh dữ liệu từng ô hoặc expiry giống hệt. Reset yêu cầu gõ RESET và
+backup an toàn; chưa thực thi reset/restore khi rà soát.
 
-## 5. Trạng Thái Kiểm Chứng Hiện Tại & Lưu Ý An Toàn
+## Chạy test logic độc lập
 
-- **Trạng thái thực nghiệm**: Cấu hình P1 đã được soạn thảo đầy đủ và đúng cú pháp. Tuy nhiên, do Docker Desktop Engine trên máy host Windows của nhóm đang ở trạng thái dừng (Stopped) tại lần kiểm tra trước và môi trường sandbox hiện tại không có Docker Engine, toàn bộ các bài kiểm thử thực tế được đánh dấu là **CHƯA KIỂM CHỨNG** theo đúng quy định.
-- **Không tự ý chuyển Phase**: Nhóm chỉ chuyển sang Phase 2 (P2: Basic/Advanced Queries & Data Model) sau khi Khánh xác nhận chạy thành công các lệnh trên và đánh dấu `PASS` trong `docs/TEST_EVIDENCE.md`.
+Tạo venv riêng, cài `backend/requirements.txt` và `httpx` để chạy TestClient,
+không cài vào Python toàn cục nếu chưa thống nhất môi trường.
 
----
-
-## 6. Đề Xuất Phê Duyệt Cho Khánh (.gitignore)
-
-Để bảo vệ repository công khai GitHub khỏi việc vô tình commit các file nhạy cảm hoặc file rác runtime, đề xuất bổ sung file `.gitignore` với các quy tắc sau:
-```gitignore
-# Python artifacts
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-env/
-
-# Environment secrets
-.env
-!.env.example
-
-# Scylla / Docker runtime data
-scylla_data/
-*.log
-
-# IDE & Editor configs
-.vscode/
-.idea/
-*.sublime-project
+```powershell
+python -m unittest discover -s backend/tests -v
 ```
-*(Chờ bạn Phạm Gia Khánh phê duyệt trước khi ghi chính thức vào kế hoạch dự án).*
+
+Các test chủ động giả lập DB và không chạy lifespan kết nối Scylla. Xem
+`docs/TEST_EVIDENCE.md` để biết đúng phạm vi bằng chứng.
+
+## Thứ tự tiếp tục và phân công
+
+Theo phase trong kế hoạch gốc: xác minh P1 → chạy schema/query/seed thật →
+hoàn thiện API và vòng đời chuyến/cảnh báo → frontend tĩnh kết nối thật →
+import/backup/restore đối chiếu → demo/báo cáo. Không coi skeleton do Gemini
+viết qua nhiều phase là các gate đã đạt.
+
+- Khánh: hạ tầng, model/query/seed, GUI và tích hợp/bằng chứng.
+- Vũ: auth/RBAC, CRUD API, vòng đời chuyến, GPS/cảnh báo và kiểm thử.
+- Luân: frontend tĩnh + Leaflet, simulator và workflow demo.
+
+Không thêm bảng/framework/tính năng ngoài kế hoạch để chữa thiếu sót.

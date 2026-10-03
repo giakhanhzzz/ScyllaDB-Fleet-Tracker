@@ -42,7 +42,7 @@ WHERE driver_id = 'DRV_001';
 SELECT trip_id, company_id, vehicle_id, driver_id, origin, destination, 
        start_time, end_time, status, distance_km, rejected_points, notes 
 FROM trips_by_id 
-WHERE trip_id = 'TRIP_20260928_001';
+WHERE trip_id = 'TRIP_202609_001';
 
 -- ------------------------------------------------------------------------------
 -- Q4: Liệt kê các xe theo trạng thái hoạt động trong công ty

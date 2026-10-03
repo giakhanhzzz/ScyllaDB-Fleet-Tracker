@@ -64,3 +64,61 @@
 - `[ĐÃ XÁC MINH]` Laragon Python 3.13 có `cassandra-driver` 3.30.1 và import được; Python 3.12 chưa có driver.
 - `[MỞ]` Khánh cần chốt interpreter chuẩn (Laragon 3.13 hoặc Python 3.12), người/thời điểm cài GUI, và phương án giải phóng RAM hoặc đổi máy demo.
 - `[TẠM DỪNG]` Không tạo `docker-compose.yml` trước khi môi trường P1 chạy được, để giữ đúng phase và tránh mã nguồn chưa thể kiểm chứng.
+
+### 2026-09-28 — Nhận source GitHub và sửa nền tảng Gemini
+
+- `[ĐÃ XÁC MINH]` Repo giakhanhzzz/ScyllaDB-Fleet-Tracker đã push main,
+  commit nguồn 0c0c04d6db970c44039f576481a2e2f228208fda. Không còn coi source
+  chỉ nằm ở /app/applet hoặc phụ thuộc link ZIP yêu cầu đăng nhập.
+- `[ĐÃ CHỐT]` Folder chuẩn vẫn là C:\Users\artis\Downloads\Project_NoSql.
+  Giữ kế hoạch và bốn file Hệ thống gốc của Khánh, không thay bằng bản Gemini
+  tự dựng lại. Nhật ký này chỉ bổ sung; TAKENOTE môn học không trộn với log code.
+- `[SAI SÓT ĐÃ LÀM RÕ]` Source Gemini đi qua nhiều phase nhưng React chỉ dùng
+  state mô phỏng; API/CQL/backup chưa chạy với Scylla. Không được gọi hoàn chỉnh,
+  không dùng UI đổi role hay toast thành bằng chứng RBAC/backup thật.
+- `[ĐÃ SỬA MÃ NGUỒN]` Auth kiểm tra hash scrypt có salt, JWT secret bắt buộc;
+  quyền/company lấy từ user active trong DB. API không nuốt lỗi bằng mock,
+  unavailable trả 503. Chuẩn hóa UTC/date trong response.
+- `[ĐÃ SỬA MÃ NGUỒN]` GPS kiểm tra UUID v1 cùng timestamp, bounds/timezone,
+  ownership; event trễ không đè latest, kiểm tra kết quả LWT. History đa ngày
+  giới hạn range; activity đọc đúng bucket, báo cáo đúng month/COMPLETED.
+- `[ĐÃ SỬA MÃ NGUỒN]` Seed có primary key GPS ổn định, month bucket theo
+  trip date; thời gian GPS hôm nay khớp chuyến đang chạy. Compose một node
+  mặc định, API/simulator profile demo; không expose management API ra host.
+- `[ĐÃ SỬA MÃ NGUỒN]` COPY dùng cqlsh thật trong container; backup kiểm tra
+  writer dừng, restore/reset xác nhận và tạo backup an toàn. Logical restore
+  yêu cầu schema tương ứng đã tồn tại; không tự apply CREATE lên bảng hiện có.
+  TTL bắt đầu lại khi COPY import, không gọi đây là snapshot vật lý.
+- `[ĐÃ XÁC MINH]` 24 test logic/API đạt với venv test riêng, Python AST 15 file
+  đạt, parser 4 PowerShell script đạt, YAML cơ bản và diff whitespace source
+  đã sửa đạt (note/kế hoạch gốc giữ nguyên định dạng).
+  DB trong test là fake: không đủ để nghiệm thu phase phụ thuộc CSDL thật.
+- `[CẦN KIỂM CHỨNG]` Phiên hiện tại chưa tìm thấy Docker CLI ở PATH/đường dẫn
+  đã thử; chưa chạy Scylla. RAM query bị Access denied, không có số đo mới.
+  Số RAM ngày 14/09 là lịch sử; ngưỡng 4 GB trống khi ấy chưa có căn cứ chuẩn.
+  Có thể soạn/sửa mã nhưng không được đánh dấu gate runtime PASS.
+- `[CÒN THIẾU]` CRUD đầy đủ, vòng đời trip/start/end/cancel và gắn trip mới vào
+  GPS, tính km lúc end trip; GPS_LOST và state alert bền qua retry/restart;
+  frontend tĩnh nối API; integration CQL/GUI/backup; Word/PPT/demo đầy đủ.
+  React được giữ dưới nhãn prototype và không có trong Docker runtime.
+- `[ĐÃ CHUẨN HÓA]` README/GUI/DEMO_SCRIPT/TEST_EVIDENCE phân biệt mã đã viết,
+  test logic và phần chưa chạy. Gộp checklist trùng vào TEST_EVIDENCE;
+  bản CHECKLIST_BANG_CHUNG.md cũ còn khôi phục được từ commit nguồn.
+- `[CHƯA THỰC HIỆN]` Không git push, không cài GUI/mua license, không chạy
+  reset/restore/DROP/TRUNCATE trong lần rà soát. Nhánh local sửa lỗi:
+  codex/fix-demo-foundation. Tiếp tục theo gate/phase trong kế hoạch gốc,
+  không thêm bảng hoặc framework để che phần thiếu.
+
+### 2026-09-28 — Khánh yêu cầu nhập bản sửa vào main
+
+- `[ĐÃ CHỐT]` Khánh đồng ý commit và nhập bản sửa đã rà soát vào main của
+  giakhanhzzz/ScyllaDB-Fleet-Tracker, không chỉ giữ ở nhánh local.
+- `[ĐÃ XÁC MINH]` Fetch trước khi bàn giao: origin/main vẫn ở
+  0c0c04d6db970c44039f576481a2e2f228208fda, chưa có commit mới/xung đột.
+  Các file local trước cập nhật log khớp bản source đã chạy 24 test.
+- `[PHẠM VI]` Chỉ commit source/test/tài liệu dự án đã rà soát. Không đưa
+  tài liệu môn học chưa track, backup CSV, .env hoặc secret vào commit.
+  Dùng fast-forward và push thường; không force-push hay đổi lịch sử cũ.
+- `[CẦN NHỚ]` Bản trên main vẫn là nền tảng đã sửa lỗi, chưa phải demo hoàn
+  chỉnh. Các gate Docker/Scylla/GUI/backup thực tế và chức năng còn thiếu giữ
+  nguyên trong TEST_EVIDENCE; không tự tick PASS khi phát hành mã nguồn.

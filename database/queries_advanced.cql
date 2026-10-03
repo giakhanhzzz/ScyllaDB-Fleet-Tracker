@@ -41,12 +41,18 @@ WHERE company_id = 'COMP_HCM_01'
 -- ------------------------------------------------------------------------------
 SELECT alert_id, company_id, alert_date, created_at, vehicle_id, trip_id, alert_type, severity, status, details 
 FROM alerts_by_id 
-WHERE alert_id = minTimeuuid('2026-09-28 03:00:00+0000');
+WHERE alert_id = 09100600-bb32-11f1-8000-000000000001;
 
 -- Cập nhật trạng thái xử lý cảnh báo trong bảng alerts_by_id:
 UPDATE alerts_by_id 
-SET status = 'RESOLVED', resolved_by = 'tra_vu_disp', resolved_at = toTimestamp(now()) 
-WHERE alert_id = minTimeuuid('2026-09-28 03:00:00+0000');
+SET status = 'RESOLVED', resolved_by = 'vu_dispatcher', resolved_at = toTimestamp(now())
+WHERE alert_id = 09100600-bb32-11f1-8000-000000000001;
+
+-- Keep the day projection consistent with the lookup table.
+UPDATE alerts_by_company_day SET status = 'RESOLVED'
+WHERE company_id = 'COMP_HCM_01' AND alert_date = '2026-09-28'
+  AND created_at = '2026-09-28 11:45:00+0000'
+  AND alert_id = 09100600-bb32-11f1-8000-000000000001;
 
 -- ------------------------------------------------------------------------------
 -- Q13: Lấy thông tin Geofence (vùng địa lý ảo) của một xe

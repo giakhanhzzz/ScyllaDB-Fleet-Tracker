@@ -1,104 +1,57 @@
-# Hướng Dẫn Kết Nối GUI (DBeaver Lite / TablePlus) Đến ScyllaDB (Phase 1)
+# GUI quản trị: DBeaver Lite/trial và TablePlus
 
-Tài liệu này hướng dẫn chi tiết cách cấu hình công cụ quản trị giao diện (GUI) để kết nối đến ScyllaDB node đang chạy trên máy cục bộ (`localhost:9042`).
+## Điều đã xác minh bằng tài liệu chính thức
 
----
+Driver Cassandra của DBeaver nằm trong Lite, Enterprise và Ultimate, không
+mặc định coi Community là lựa chọn đáp ứng đề tài. DBeaver mô tả khả năng duyệt
+schema/dữ liệu và chạy CQL. Đọc [tài liệu Cassandra của DBeaver](https://dbeaver.com/docs/dbeaver/Cassandra/).
 
-## 1. Công Cụ Chính: DBeaver (DBeaver Lite / Community)
+Chưa cài/thử GUI trong lần rà soát này. Cassandra connector làm việc với ScyllaDB
+trong cấu hình dự án là điều cần kiểm chứng, không ghi “tương thích 100%”.
+Không dùng RAM ước lượng hoặc ảnh/result mẫu làm bằng chứng.
 
-ScyllaDB tương thích hoàn toàn với giao thức mạng (CQL Native Protocol) của Apache Cassandra. Do đó, trong DBeaver, chúng ta sử dụng driver **Apache Cassandra**.
+## Quy trình kiểm tra trên máy demo
 
-### Các Bước Cấu Hình:
+1. Khánh xác nhận bản DBeaver Lite/trial, version, hệ điều hành, license/trial
+   hợp lệ tới ngày báo cáo. Không tự mua license hay cài công cụ.
+2. Chạy gate P1: Scylla healthy, CQL đọc được system.local, cổng 9042 không
+   bị Cassandra cũ chiếm. Không chạy hai server cùng cổng.
+3. Tạo connection bằng Cassandra connector: localhost, port 9042.
+   Cấu hình local hiện chưa bật auth CSDL; đây không phải mẫu triển khai public.
+4. Test Connection, đọc `SELECT release_version FROM system.local;`.
+   Ghi nguyên kết quả/ảnh thật, không điền trước release/datacenter.
+5. Sau khởi tạo schema/seed, duyệt fleet_tracker và xem PK/clustering/TTL.
+6. Chạy từng Q1–Q14 trong hai file query; thay ngày theo seed và tham số theo
+   bản ghi thật. Không chạy cả file mutation vô tình trong lúc demo.
+7. Thử các thao tác GUI cần đưa vào báo cáo: query editor, schema/data browser,
+   export/import một bảng fixture. Khả năng edit phụ thuộc đủ primary key;
+   một lần sửa bảng không tự đồng bộ projection khác của ứng dụng.
 
-1. **Khởi động DBeaver**:
-   - Mở DBeaver trên máy tính Windows.
-   - Chọn menu **Database** -> **New Database Connection** (hoặc nhấn biểu tượng phích cắm điện có dấu cộng).
+## So sánh GUI theo bằng chứng, không theo quảng cáo
 
-2. **Chọn Driver**:
-   - Trong ô tìm kiếm, nhập: `Cassandra` hoặc `Apache Cassandra`.
-   - Chọn **Apache Cassandra** và nhấn **Next**.
-   - *Lưu ý*: Nếu đây là lần đầu tiên sử dụng, DBeaver sẽ yêu cầu tải thư viện driver (Driver files). Nhấn nút **Download** để DBeaver tự động tải `cassandra-driver-core`.
+TablePlus vẫn là ứng viên đã chốt để so sánh/dự phòng. Chưa xác nhận connector
+Cassandra có trên đúng phiên bản Windows của máy nhóm. Trang chủ liệt kê sản
+phẩm theo nhiều hệ điều hành, không đủ chứng minh connector cần dùng:
+[TablePlus](https://tableplus.com/).
 
-3. **Thiết Lập Thông Số Kết Nối (Connection Settings)**:
-   - **Host**: `localhost` (hoặc `127.0.0.1`)
-   - **Port**: `9042`
-   - **Database / Keyspace**: Để trống (hoặc nhập `system`)
-   - **Username**: Để trống (mặc định ScyllaDB chạy chế độ `AllowAllAuthenticator`)
-   - **Password**: Để trống
+| Mục đo trên cùng máy/dataset | DBeaver Lite/trial | TablePlus đúng bản OS |
+| --- | --- | --- |
+| Version, license, hạn trial | CẦN GHI NHẬN | CẦN GHI NHẬN |
+| Cassandra/Scylla connect thực | CHƯA KIỂM CHỨNG | CHƯA KIỂM CHỨNG |
+| Schema, PK/clustering, TTL | CHƯA THỬ | CHƯA THỬ |
+| Q1–Q14 và kết quả tương đương | CHƯA THỬ | CHƯA THỬ |
+| Import/export dữ liệu có kiểm đếm | CHƯA THỬ | CHƯA THỬ |
+| Thời gian thao tác, RAM đo thực | CHƯA ĐO | CHƯA ĐO |
+| Điểm mạnh/yếu nhóm trực tiếp gặp | CHƯA KẾT LUẬN | CHƯA KẾT LUẬN |
 
-4. **Kiểm Tra Kết Nối (Test Connection)**:
-   - Nhấn nút **Test Connection...** ở góc dưới bên trái cửa sổ.
-   - Khi kết nối thành công, DBeaver sẽ hiển thị hộp thoại:
-     `Connected! Server: ScyllaDB / Cassandra, Driver: Cassandra Java Driver`.
-   - Nhấn **Finish** để lưu kết nối.
+Nếu TablePlus không có connector trên OS đang dùng, ghi thiếu hỗ trợ đúng
+phiên bản là một hạn chế và hỏi Khánh trước khi thay GUI so sánh/fallback.
+Không tự bổ sung NoSQL Manager hoặc gán nó cho nội dung slide chưa có bằng chứng.
 
-5. **Xác Minh Hoạt Động Bằng Truy Vấn CQL**:
-   - Mở cửa sổ **SQL Editor** (F3 hoặc Ctrl+Enter) và thực thi các câu lệnh sau:
-   ```sql
-   -- Kiểm tra thông tin phiên bản và node ScyllaDB
-   SELECT cluster_name, release_version, broadcast_address, data_center, rack 
-   FROM system.local;
+## Xử lý lỗi
 
-   -- Xem danh sách các Keyspace hệ thống
-   SELECT keyspace_name, durable_writes 
-   FROM system_schema.keyspaces;
-   ```
-
----
-
-## 2. Công Cụ Dự Phòng & Trong Giáo Trình: TablePlus & NoSQL Manager for Cassandra
-
-### A. TablePlus (Được giới thiệu trong Giáo trình TH NoSQL 2025 - Trang 42-45)
-1. Mở TablePlus -> Click **Create a new connection...** -> Chọn **Cassandra**.
-2. Thiết lập thông số:
-   - **Name**: `ScyllaDB Localhost`
-   - **Host**: `127.0.0.1`
-   - **Port**: `9042`
-   - **User / Password**: Để trống
-3. Nhấn **Test** để xác nhận kết nối xanh (OK) -> Nhấn **Connect**.
-
-### B. NoSQL Manager for Cassandra (Được hướng dẫn trong Slide thực hành của Khoa)
-1. Khởi động GUI Tool **NoSQL Manager for Cassandra Professional** -> Chọn **Use 30-days Trial**.
-2. Tạo kết nối đến server:
-   - **Host**: `localhost` (hoặc `127.0.0.1`)
-   - **Port**: `9042`
-   - Nhấn **Test Connection** -> Khi hiển thị `Connected!`, nhấn **OK**.
-3. Thao tác trên giao diện:
-   - Chuột phải vào Connection -> **Create new Keyspace** (hoặc mở **CQL Editor** để thực thi câu lệnh CQL trực tiếp).
-
----
-
-## 3. So Sánh Các Công Cụ GUI Theo Rubric Đồ Án & Giáo Trình HUIT
-
-| Tiêu Chí | DBeaver Lite / Community | NoSQL Manager for Cassandra | TablePlus |
-| :--- | :--- | :--- | :--- |
-| **Nguồn gốc trong học phần** | Đề xuất trong đồ án nhóm | **Hướng dẫn chi tiết trong Slide BM HTTT** | **Hướng dẫn trong Giáo trình TH 2025** |
-| **Hỗ trợ CQL & Scylla/Cassandra** | Đầy đủ visual keyspaces, column family, schema | Chuyên biệt 100% cho Cassandra/ScyllaDB | Hỗ trợ cơ bản, duyệt bảng trực quan |
-| **Tự động tải driver** | Tải driver JAR qua Maven | Tích hợp sẵn engine driver | Tích hợp sẵn engine driver |
-| **Quản lý Schema & Index** | Rất chi tiết (Partition Key, Clustering Key) | Trực quan chuyên sâu cho Column Family | Xem cấu trúc bảng dạng lưới đơn giản |
-| **Tiêu tốn tài nguyên (RAM)** | Java (~300-600MB RAM) | Native Win32 (~80-150MB RAM, rất nhẹ) | Native (~100-200MB RAM) |
-| **Đánh giá đồ án** | **Lựa chọn chính thức (Primary)** | **Lựa chọn thực hành theo Slide trường** | **Lựa chọn so sánh / dự phòng** |
-
----
-
-## 4. Xử Lý Sự Cố Thường Gặp (Troubleshooting)
-
-1. **Lỗi "Connection refused: connect"**:
-   - Nguyên nhân: Docker container `scylla-node` chưa chạy hoặc port 9042 chưa được map ra host.
-   - Khắc phục:
-     ```powershell
-     docker compose ps
-     # Nếu container Exit hoặc chưa chạy:
-     docker compose up -d
-     ```
-
-2. **Lỗi "Timed out waiting for server to respond"**:
-   - Nguyên nhân: ScyllaDB cần khoảng 30 - 45 giây sau khi container khởi động để bật socket CQL 9042.
-   - Khắc phục: Đợi lệnh `docker exec -it scylla-node nodetool status` hiển thị trạng thái `UN` (Up/Normal) trước khi nhấn Test Connection.
-
-3. **Xung đột cổng 9042**:
-   - Kiểm tra bằng PowerShell:
-     ```powershell
-     Get-NetTCPConnection -LocalPort 9042 -ErrorAction SilentlyContinue
-     ```
-   - Đảm bảo không có service Cassandra/Scylla nào khác đang chiếm port.
+Connection refused: kiểm tra `docker compose ps`, health/log và port mapping.
+Timeout: đọc log, chờ CQL ready bằng retry script; không cam kết mốc 30–45 giây.
+Driver/license thiếu: ghi version/edition và thông báo lỗi; không lách license.
+Query bị từ chối: đối chiếu PK/clustering, kiểu timestamp/timeuuid và CQL;
+không thêm ALLOW FILTERING để làm demo trông như chạy được.

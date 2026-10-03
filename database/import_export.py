@@ -1,89 +1,51 @@
-#!/usr/bin/env python3
-"""
-ScyllaDB Fleet Tracker - Import & Export Utility
-Hỗ trợ xuất/nhập dữ liệu CSV và JSON cho các bảng ScyllaDB
-Đáp ứng tiêu chí Rubric Mục 6: Import/Export và đối chiếu dòng dữ liệu
-"""
-
-import os
-import sys
+"""Local administration only: cqlsh COPY for the 15 approved tables."""
+import argparse
 import csv
-import json
-from datetime import datetime
+import subprocess
+from pathlib import Path
 
-try:
-    from cassandra.cluster import Cluster
-except ImportError:
-    pass
+TABLES = (
+    "users_by_username", "users_by_company", "vehicles_by_id", "vehicles_by_status",
+    "drivers_by_id", "drivers_by_company", "trips_by_id", "trips_by_company_day",
+    "trips_by_driver_month", "geofences_by_vehicle", "location_events_by_vehicle_day",
+    "latest_locations_by_company", "vehicle_activity_by_hour", "alerts_by_company_day", "alerts_by_id",
+)
 
-def export_table_to_csv(table_name: str, output_path: str):
-    """Xuất dữ liệu một bảng ScyllaDB ra file CSV"""
-    host = os.getenv("SCYLLA_HOST", "localhost")
-    port = int(os.getenv("SCYLLA_PORT", 9042))
-    
-    cluster = Cluster(contact_points=[host], port=port)
-    session = cluster.connect("fleet_tracker")
-    
-    print(f"[EXPORT] Bắt đầu xuất bảng '{table_name}' ra {output_path}...")
-    rows = session.execute(f"SELECT * FROM {table_name}")
-    
-    row_list = list(rows)
-    if not row_list:
-        print(f"[WARN] Bảng '{table_name}' không có dữ liệu để xuất.")
-        cluster.shutdown()
-        return 0
+def run(*args):
+    return subprocess.run(args, check=True, text=True, encoding="utf-8", capture_output=True)
 
-    fieldnames = row_list[0]._fields
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    with open(output_path, mode="w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(fieldnames)
-        for r in row_list:
-            writer.writerow([getattr(r, fn) for fn in fieldnames])
-            
-    print(f"[SUCCESS] Đã xuất {len(row_list)} dòng từ bảng '{table_name}' thành công!")
-    cluster.shutdown()
-    return len(row_list)
+def count_csv(path):
+    with Path(path).open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.reader(handle)
+        next(reader, None)
+        return sum(1 for _ in reader)
 
-def import_vehicles_from_csv(input_path: str):
-    """Nhập dữ liệu xe từ file CSV vào ScyllaDB (cập nhật đồng thời vehicles_by_id và vehicles_by_status)"""
-    host = os.getenv("SCYLLA_HOST", "localhost")
-    port = int(os.getenv("SCYLLA_PORT", 9042))
-    
-    cluster = Cluster(contact_points=[host], port=port)
-    session = cluster.connect("fleet_tracker")
-    
-    print(f"[IMPORT] Đọc dữ liệu từ file {input_path}...")
-    imported_count = 0
-    
-    with open(input_path, mode="r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            session.execute(
-                """
-                INSERT INTO vehicles_by_id (vehicle_id, company_id, plate, model, current_driver_id, status, speed_limit, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, toTimestamp(now()))
-                """,
-                (row["vehicle_id"], row["company_id"], row["plate"], row["model"], 
-                 row["current_driver_id"] or None, row["status"], float(row["speed_limit"]))
-            )
-            session.execute(
-                """
-                INSERT INTO vehicles_by_status (company_id, status, vehicle_id, plate, model, current_driver_id, speed_limit)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """,
-                (row["company_id"], row["status"], row["vehicle_id"], row["plate"], 
-                 row["model"], row["current_driver_id"] or None, float(row["speed_limit"]))
-            )
-            imported_count += 1
-            
-    print(f"[SUCCESS] Đã nhập thành công {imported_count} dòng vào ScyllaDB!")
-    cluster.shutdown()
-    return imported_count
+def transfer(mode, table, path):
+    if table not in TABLES or mode not in ("export", "import"):
+        raise ValueError("Invalid table or operation")
+    path = Path(path).resolve()
+    remote = f"/tmp/fleet-{table}.csv"
+    if mode == "export":
+        path.parent.mkdir(parents=True, exist_ok=True)
+        run("docker", "compose", "exec", "-T", "scylla", "cqlsh", "-e",
+            f"COPY fleet_tracker.{table} TO '{remote}' WITH HEADER = TRUE;")
+        run("docker", "compose", "cp", f"scylla:{remote}", str(path))
+    else:
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        run("docker", "compose", "cp", str(path), f"scylla:{remote}")
+        result = run("docker", "compose", "exec", "-T", "scylla", "cqlsh", "-e",
+                     f"COPY fleet_tracker.{table} FROM '{remote}' WITH HEADER = TRUE;")
+        # cqlsh COPY may print row errors without a nonzero process exit.
+        if "Failed to import" in result.stdout + result.stderr:
+            raise RuntimeError(result.stdout + result.stderr)
+    print(f"{mode}: {table}: {count_csv(path)} CSV rows")
+    return count_csv(path)
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2 and sys.argv[1] == "export":
-        export_table_to_csv(sys.argv[2], f"docs/exports/{sys.argv[2]}.csv")
-    else:
-        print("Sử dụng: python database/import_export.py export <table_name>")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("mode", choices=("export", "import"))
+    parser.add_argument("table", choices=TABLES)
+    parser.add_argument("path", type=Path)
+    args = parser.parse_args()
+    transfer(args.mode, args.table, args.path)

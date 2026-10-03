@@ -8,7 +8,7 @@ Populates 15 ScyllaDB tables with realistic sample data:
 - 20 Trips (Planned, In-Progress, Completed)
 - Geofences (HCMC Inner City)
 - 3,000+ GPS Location Events across multiple days
-- Alerts (Overspeed, Geofence Exit, GPS Lost)
+- One sample overspeed alert (other types require the simulator/API)
 """
 
 import os
@@ -16,13 +16,18 @@ import sys
 import uuid
 import math
 import random
+import hashlib
+from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 
 try:
     from cassandra.cluster import Cluster
     from cassandra.util import uuid_from_time
 except ImportError:
-    print("[WARN] cassandra-driver not installed. Run 'pip install cassandra-driver' to execute on real ScyllaDB.")
+    raise SystemExit("Thiếu cassandra-driver; seed chưa chạy")
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
+from app.security import hash_password
 
 COMPANY_ID = "COMP_HCM_01"
 BASE_LAT, BASE_LNG = 10.7769, 106.7009 # Ben Thanh Market, TP.HCM
@@ -44,17 +49,16 @@ def seed_data():
         cluster, session = get_session()
     except Exception as e:
         print(f"[FAIL] Không thể kết nối tới ScyllaDB: {e}")
-        print("Đang kiểm tra ở chế độ kiểm tra dữ liệu...")
         return False
 
-    now = datetime.now(timezone.utc)
-    today = now.date()
+    today = date.fromisoformat(os.getenv("SEED_DATE", "2026-09-28"))
+    now = datetime.combine(today, datetime.min.time(), timezone.utc) + timedelta(hours=12)
+    random.seed(2026)
     yesterday = today - timedelta(days=1)
-    month_str = today.strftime("%Y-%m")
 
     # 1. Users (3 Roles)
-    # Password: 'Password123@' (hash sha256 demo)
-    pwd_hash = "ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f"
+    # Demo credentials only; use the same password hashing function as the API.
+    pwd_hash = hash_password("Password123@")
     users = [
         ("khanh_admin", "Phạm Gia Khánh", "ADMIN", COMPANY_ID, True),
         ("vu_dispatcher", "Trà Ngọc Nguyên Vũ", "DISPATCHER", COMPANY_ID, True),
@@ -145,6 +149,7 @@ def seed_data():
 
     # 4. Trips (20 Trips)
     print("[INFO] Đang nạp 20 Chuyến đi...")
+    trip_windows = []
     for i in range(1, 21):
         trip_id = f"TRIP_202609_{i:03d}"
         v_idx = (i - 1) % len(vehicles)
@@ -156,7 +161,19 @@ def seed_data():
         st_time = datetime(t_date.year, t_date.month, t_date.day, 6 + (i % 10), (i * 12) % 60, tzinfo=timezone.utc)
         et_time = st_time + timedelta(hours=2, minutes=30)
         status = "IN_PROGRESS" if i in [1, 2, 3, 5, 7] else "COMPLETED"
+        if i in [4, 6]:
+            status = "PLANNED"
+            st_time = now + timedelta(hours=1)
+        elif status == "IN_PROGRESS":
+            st_time = now.replace(hour=10, minute=0) - timedelta(minutes=15 + i)
+        else:
+            # Completed fixtures must finish before today's ongoing trips.
+            st_time = datetime.combine(t_date, datetime.min.time(), timezone.utc) + timedelta(hours=6, minutes=(i % 3) * 15)
+            et_time = st_time + timedelta(hours=2, minutes=30)
         distance = round(15.5 + (i * 3.8), 2)
+        if status != "COMPLETED":
+            et_time, distance = None, 0.0
+        trip_windows.append((trip_id, veh_id, st_time, et_time, status))
 
         session.execute(
             """
@@ -177,11 +194,11 @@ def seed_data():
             INSERT INTO trips_by_driver_month (driver_id, year_month, start_time, trip_id, company_id, vehicle_id, status, distance_km)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (drv_id, month_str, st_time, trip_id, COMPANY_ID, veh_id, status, distance)
+            (drv_id, t_date.strftime("%Y-%m"), st_time, trip_id, COMPANY_ID, veh_id, status, distance)
         )
 
     # 5. GPS Location Events (>3,000 events)
-    print("[INFO] Đang sinh 3,200 GPS events cho 2 ngày (2026-09-27 và 2026-09-28)...")
+    print(f"[INFO] Đang sinh 3,200 GPS events cho {today - timedelta(days=1)} và {today}...")
     event_count = 0
     active_vehicles = ["VEH_001", "VEH_002", "VEH_003", "VEH_005", "VEH_007"]
 
@@ -189,26 +206,29 @@ def seed_data():
         event_d = today - timedelta(days=d_offset)
         for veh_id in active_vehicles:
             # 320 points per vehicle per day
-            start_hour = 7
+            start_hour = 10 if d_offset == 0 else 7
             cur_lat = BASE_LAT + (random.uniform(-0.02, 0.02))
             cur_lng = BASE_LNG + (random.uniform(-0.02, 0.02))
             
             for pt in range(320):
                 ev_time = datetime(event_d.year, event_d.month, event_d.day, start_hour, 0, 0, tzinfo=timezone.utc) + timedelta(seconds=pt * 4)
-                ev_uuid = uuid_from_time(ev_time)
+                ev_uuid = uuid_from_time(ev_time, node=int.from_bytes(hashlib.sha256(veh_id.encode()).digest()[:6], "big"), clock_seq=0)
+                event_trip = next((tid for tid, vehicle, start, end, state in trip_windows
+                                   if vehicle == veh_id and state != "PLANNED"
+                                   and start <= ev_time and (end is None or ev_time <= end)), None)
                 
                 # Di chuyển dần
                 cur_lat += random.uniform(-0.0003, 0.0004)
                 cur_lng += random.uniform(-0.0003, 0.0004)
                 speed = round(random.uniform(25.0, 55.0), 1)
-                heading = round(random.uniform(0.0, 360.0), 1)
+                heading = round(random.uniform(0.0, 359.9), 1)
 
                 session.execute(
                     """
                     INSERT INTO location_events_by_vehicle_day (vehicle_id, event_date, event_time, event_id, lat, lng, speed, heading, trip_id, company_id)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
-                    (veh_id, event_d, ev_time, ev_uuid, cur_lat, cur_lng, speed, heading, "TRIP_202609_001", COMPANY_ID)
+                    (veh_id, event_d, ev_time, ev_uuid, cur_lat, cur_lng, speed, heading, event_trip, COMPANY_ID)
                 )
 
                 # Activity bucket
@@ -225,9 +245,9 @@ def seed_data():
                     session.execute(
                         """
                         INSERT INTO latest_locations_by_company (company_id, vehicle_id, event_time, lat, lng, speed, heading, trip_id, status)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) IF NOT EXISTS
                         """,
-                        (COMPANY_ID, veh_id, ev_time, cur_lat, cur_lng, speed, heading, "TRIP_202609_001", "RUNNING")
+                        (COMPANY_ID, veh_id, ev_time, cur_lat, cur_lng, speed, heading, event_trip, "RUNNING")
                     )
 
                 event_count += 1
@@ -236,7 +256,7 @@ def seed_data():
 
     # 6. Sample Alerts
     alert_time = now - timedelta(minutes=15)
-    alert_uuid = uuid_from_time(alert_time)
+    alert_uuid = uuid_from_time(alert_time, node=1, clock_seq=0)
     session.execute(
         """
         INSERT INTO alerts_by_company_day (company_id, alert_date, created_at, alert_id, vehicle_id, trip_id, alert_type, severity, status, details)
@@ -259,4 +279,4 @@ def seed_data():
     return True
 
 if __name__ == "__main__":
-    seed_data()
+    sys.exit(0 if seed_data() else 1)

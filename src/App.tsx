@@ -451,6 +451,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+      <div role="status" className="bg-amber-950 text-amber-100 px-4 py-3 text-sm">
+        Bản thử giao diện: dữ liệu được mô phỏng trong trình duyệt. Chưa kết nối FastAPI/ScyllaDB; các nút CQL, CSV và snapshot chỉ minh họa.
+      </div>
       {/* Top Navigation Bar */}
       <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
@@ -462,7 +465,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <span className="text-sm font-bold text-white tracking-wide">ScyllaDB Fleet Tracker</span>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                  LIVE DEMO
+                  UI PROTOTYPE
                 </span>
               </div>
               <p className="text-xs text-slate-400">Hệ thống theo dõi vị trí và lịch sử hành trình đội xe (Column Family / Time-Series)</p>
@@ -471,7 +474,7 @@ export default function App() {
 
           {/* Role Switcher & User Profile */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 mr-1 hidden sm:inline">Phân quyền:</span>
+            <span className="text-xs text-slate-400 mr-1 hidden sm:inline">Xem thử vai trò:</span>
             <button
               onClick={() => handleSwitchUser('ADMIN')}
               className={`px-2.5 py-1 rounded text-xs font-medium transition ${currentUser.role === 'ADMIN' ? 'bg-sky-600 text-white shadow-sm' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
@@ -1105,21 +1108,21 @@ export default function App() {
                 </p>
                 <div className="space-y-2">
                   <button
-                    onClick={() => alert('Đã xuất file: docs/backups/vehicles_export.csv (10 dòng)')}
+                    onClick={() => alert('Mô phỏng giao diện: chưa xuất CSV thật. Dùng script import_export.py cho dữ liệu ScyllaDB.')}
                     className="w-full py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center justify-between"
                   >
                     <span>Xuất bảng: vehicles_by_id.csv</span>
                     <span className="font-mono text-emerald-400">10 dòng</span>
                   </button>
                   <button
-                    onClick={() => alert('Đã xuất file: docs/backups/drivers_export.csv (8 dòng)')}
+                    onClick={() => alert('Mô phỏng giao diện: chưa xuất CSV thật. Dùng script import_export.py cho dữ liệu ScyllaDB.')}
                     className="w-full py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center justify-between"
                   >
                     <span>Xuất bảng: drivers_by_id.csv</span>
                     <span className="font-mono text-emerald-400">8 dòng</span>
                   </button>
                   <button
-                    onClick={() => alert('Đã xuất file: docs/backups/trips_export.csv (20 dòng)')}
+                    onClick={() => alert('Mô phỏng giao diện: chưa xuất CSV thật. Dùng script import_export.py cho dữ liệu ScyllaDB.')}
                     className="w-full py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 flex items-center justify-between"
                   >
                     <span>Xuất bảng: trips_by_id.csv</span>
@@ -1138,7 +1141,7 @@ export default function App() {
                 </p>
                 <div className="space-y-3 pt-2">
                   <button
-                    onClick={() => alert('Đã tạo Snapshot thành công! Lưu trữ tại docs/backups/schema_backup.cql')}
+                    onClick={() => alert('Mô phỏng giao diện: chưa tạo snapshot. Script backup.ps1 hiện sao lưu schema + CSV.')}
                     className="w-full py-2.5 px-4 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition flex items-center justify-center gap-2"
                   >
                     <Download className="w-4 h-4" /> Kích Hoạt Snapshot Ngay
@@ -1149,7 +1152,7 @@ export default function App() {
                         alert('Chỉ tài khoản ADMIN mới có quyền phục hồi dữ liệu!');
                         return;
                       }
-                      alert('Đã phục hồi dữ liệu thành công từ file Seed! Kiểm tra đối chiếu số dòng khớp 100%.');
+                      alert('Mô phỏng giao diện: chưa restore dữ liệu. Restore thật dùng scripts/restore.ps1 với thư mục backup.');
                     }}
                     className="w-full py-2.5 px-4 rounded-lg bg-red-950/60 hover:bg-red-900/60 text-xs font-bold text-red-300 border border-red-500/30 transition flex items-center justify-center gap-2"
                   >

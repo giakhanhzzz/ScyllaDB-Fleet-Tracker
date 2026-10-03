@@ -344,3 +344,4 @@ ScyllaDB hợp time-series, IoT/telemetry, ghi lớn, đọc theo device/key và
 - `COPY TO/FROM`: https://docs.scylladb.com/manual/stable/cql/cqlsh.html
 - Backup: https://docs.scylladb.com/manual/stable/operating-scylla/procedures/backup-restore/backup.html
 - DBeaver Cassandra: https://dbeaver.com/docs/dbeaver/Cassandra/
+

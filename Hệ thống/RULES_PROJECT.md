@@ -45,3 +45,4 @@ Không tạo file bộ nhớ trùng chức năng; không đổi tên/di chuyển
 - Nêu trade-off và khuyến nghị khi có lựa chọn; không tự đổi công nghệ đã chốt.
 - Không viết code khi Khánh chỉ yêu cầu kế hoạch.
 - Task hoàn tất khi đầu ra được kiểm tra, rubric có bằng chứng và bộ nhớ liên quan đã cập nhật/báo lại.
+

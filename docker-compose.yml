@@ -1,35 +1,54 @@
-version: '3.8'
-
 services:
   scylla:
     image: scylladb/scylla:5.4
     container_name: scylla-node
-    restart: unless-stopped
-    # Giới hạn tài nguyên để vận hành an toàn trên máy Windows 8GB RAM:
-    # --smp 1: Dùng 1 CPU core logic
-    # --memory 1500M: Giới hạn RAM Scylla cấp phát 1.5GB
-    # --overprovisioned 1: Chế độ tối ưu khi chạy trên môi trường chia sẻ tài nguyên / Docker desktop
-    # --api-address 0.0.0.0: Cho phép REST API lắng nghe từ bên ngoài
-    command: --smp 1 --memory 1500M --overprovisioned 1 --api-address 0.0.0.0
+    command: --smp 1 --memory 1500M --overprovisioned 1
     ports:
-      - "9042:9042"   # CQL Native Transport (DBeaver, cassandra-driver, backend)
-      - "10000:10000" # Scylla REST Management API (nodetool / monitoring)
+      - "127.0.0.1:9042:9042"
     volumes:
       - scylla_data:/var/lib/scylla
-    networks:
-      - fleet-network
     healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES;' || exit 1"]
+      test: ["CMD-SHELL", "cqlsh -e 'SELECT release_version FROM system.local;'"]
+      interval: 10s
+      timeout: 10s
+      retries: 24
+      start_period: 60s
+
+  backend:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      SCYLLA_HOST: scylla
+      SCYLLA_PORT: 9042
+      SCYLLA_KEYSPACE: fleet_tracker
+      SECRET_KEY: ${SECRET_KEY:-}
+      SEED_DATE: ${SEED_DATE:-2026-09-28}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      scylla:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
       interval: 10s
       timeout: 5s
-      retries: 12
-      start_period: 40s
+      retries: 6
+
+  simulator:
+    profiles: ["demo"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "simulator/gps_simulator.py"]
+    environment:
+      BACKEND_URL: http://backend:8000
+      SIMULATOR_INTERVAL_SECONDS: ${SIMULATOR_INTERVAL_SECONDS:-4}
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   scylla_data:
     name: scylla_fleet_data
-
-networks:
-  fleet-network:
-    name: scylla_fleet_network
-    driver: bridge

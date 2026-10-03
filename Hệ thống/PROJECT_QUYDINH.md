@@ -63,3 +63,4 @@
 - Nâng cao: lịch sử xe trong `[t1,t2]`; xe di chuyển N phút gần nhất; tổng km/số chuyến theo tài xế/tháng.
 - Import/export CSV hoặc JSON; backup/restore bằng snapshot hoặc `COPY`.
 - Chạy query trên GUI Tool và ứng dụng; có simulator, thống kê và tìm kiếm/lọc.
+

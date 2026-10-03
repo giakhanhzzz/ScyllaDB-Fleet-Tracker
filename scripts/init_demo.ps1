@@ -1,17 +1,26 @@
-# ==============================================================================
-# ScyllaDB Fleet Tracker - Khởi tạo toàn bộ môi trường Demo
-# ==============================================================================
-
-Write-Host ">>> 1. Khoi dong ScyllaDB bang Docker Compose..." -ForegroundColor Cyan
-docker compose up -d
-
-Write-Host ">>> 2. Doi ScyllaDB san sang ket noi (port 9042)..." -ForegroundColor Yellow
-python scripts/wait_for_scylla.py
-
-Write-Host ">>> 3. Nap Schema CQL (15 Tables)..." -ForegroundColor Cyan
-docker exec -i scylla-node cqlsh < database/schema.cql
-
-Write-Host ">>> 4. Nap du lieu mau Seed (Users, Vehicles, Drivers, Trips, 3000+ GPS)..." -ForegroundColor Cyan
-python database/seed.py
-
-Write-Host ">>> [HOAN TAT] He thong da khoi tao thanh cong! San sang demo!" -ForegroundColor Green
+$ErrorActionPreference = "Stop"
+Set-Location (Split-Path -Parent $PSScriptRoot)
+if (-not (Test-Path -LiteralPath ".env")) {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    $key = [System.BitConverter]::ToString($bytes).Replace("-", "").ToLowerInvariant()
+    (Get-Content -LiteralPath ".env.example" -Raw).Replace("SECRET_KEY=", "SECRET_KEY=$key") | Set-Content -LiteralPath ".env" -Encoding utf8
+}
+docker compose --profile demo build backend simulator
+if ($LASTEXITCODE -ne 0) { throw "Build backend failed" }
+docker compose up -d --wait scylla
+if ($LASTEXITCODE -ne 0) { throw "Scylla startup failed" }
+docker compose --profile demo stop simulator backend
+if ($LASTEXITCODE -ne 0) { throw "Stop writers before seed failed" }
+docker compose --profile demo run --rm --no-deps backend python scripts/wait_for_scylla.py
+if ($LASTEXITCODE -ne 0) { throw "CQL smoke test failed" }
+docker compose cp database/schema.cql scylla:/tmp/fleet-schema.cql
+if ($LASTEXITCODE -ne 0) { throw "Schema copy failed" }
+docker compose exec -T scylla cqlsh -f /tmp/fleet-schema.cql
+if ($LASTEXITCODE -ne 0) { throw "Schema execution failed" }
+docker compose --profile demo run --rm --no-deps backend python database/seed.py
+if ($LASTEXITCODE -ne 0) { throw "Seed failed; demo not initialized" }
+docker compose --profile demo up -d --wait backend
+if ($LASTEXITCODE -ne 0) { throw "Backend startup failed" }
+Write-Host "Backend: http://localhost:8000/docs. Simulator starts only when explicitly requested."

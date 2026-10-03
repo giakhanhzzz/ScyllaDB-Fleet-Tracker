@@ -1,9 +1,9 @@
-# ==============================================================================
-# ScyllaDB Fleet Tracker - Reset Môi Trường Demo Sạch Sẽ
-# ==============================================================================
-
-Write-Host ">>> Xoa sach du lieu bang va nap lai tu dau..." -ForegroundColor Yellow
-docker exec -i scylla-node cqlsh -e "DROP KEYSPACE IF EXISTS fleet_tracker;"
-docker exec -i scylla-node cqlsh < database/schema.cql
-python database/seed.py
-Write-Host ">>> [SUCCESS] Da reset demo ve trang thai ban dau!" -ForegroundColor Green
+$ErrorActionPreference = "Stop"
+Set-Location (Split-Path -Parent $PSScriptRoot)
+if ((Read-Host "Type RESET to replace fleet_tracker with seed data") -cne "RESET") { Write-Host "Cancelled"; return }
+docker compose --profile demo stop simulator backend
+if ($LASTEXITCODE -ne 0) { throw "Stop writers failed" }
+& "$PSScriptRoot/backup.ps1"
+docker compose exec -T scylla cqlsh -e "DROP KEYSPACE IF EXISTS fleet_tracker;"
+if ($LASTEXITCODE -ne 0) { throw "Reset failed" }
+& "$PSScriptRoot/init_demo.ps1"

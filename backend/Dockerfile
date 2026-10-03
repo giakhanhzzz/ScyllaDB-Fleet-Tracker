@@ -1,19 +1,10 @@
 FROM python:3.11-slim
-
 WORKDIR /app
-
-# Cài đặt công cụ biên dịch nếu cần cho cassandra-driver
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-COPY . .
-
+COPY backend/requirements.txt .
+RUN python -m pip install --no-cache-dir -r requirements.txt
+COPY backend/app ./app
+COPY database ./database
+COPY scripts/wait_for_scylla.py ./scripts/wait_for_scylla.py
+COPY simulator ./simulator
 EXPOSE 8000
-
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

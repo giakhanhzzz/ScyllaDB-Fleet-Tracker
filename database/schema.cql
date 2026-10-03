@@ -178,7 +178,8 @@ CREATE TABLE IF NOT EXISTS location_events_by_vehicle_day (
     company_id text,
     PRIMARY KEY ((vehicle_id, event_date), event_time, event_id)
 ) WITH CLUSTERING ORDER BY (event_time DESC, event_id ASC)
-  AND default_time_to_live = 7776000;
+  AND default_time_to_live = 7776000
+  AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_unit': 'DAYS', 'compaction_window_size': '1'};
 
 -- ------------------------------------------------------------------------------
 -- 12. latest_locations_by_company (Q8: Vị trí mới nhất của tất cả/từng xe)
@@ -211,7 +212,8 @@ CREATE TABLE IF NOT EXISTS vehicle_activity_by_hour (
     speed double,
     PRIMARY KEY ((company_id, activity_date, hour), event_time, vehicle_id, event_id)
 ) WITH CLUSTERING ORDER BY (event_time DESC, vehicle_id ASC, event_id ASC)
-  AND default_time_to_live = 172800;
+  AND default_time_to_live = 172800
+  AND compaction = {'class': 'TimeWindowCompactionStrategy', 'compaction_window_unit': 'HOURS', 'compaction_window_size': '1'};
 
 -- ------------------------------------------------------------------------------
 -- 14. alerts_by_company_day (Q11: Danh sách cảnh báo trong ngày)

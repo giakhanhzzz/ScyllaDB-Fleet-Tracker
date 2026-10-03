@@ -1,64 +1,47 @@
-# Kịch Bản Trình Chiếu Demo (DEMO_SCRIPT.md)
+# Kịch bản demo — mục tiêu nghiệm thu, chưa phải kết quả đã đạt
 
-Tài liệu này hướng dẫn chi tiết kịch bản thuyết trình và chạy thử đồ án **ScyllaDB Fleet Tracker** theo đúng thang điểm 10 của giảng viên.
+## Trạng thái
 
----
+API/script đang có mã nguồn và test logic; chưa chạy Scylla thật.
+UI React là prototype mô phỏng, không dùng để chứng minh CRUD, role hay backup.
+Không tuyên bố đạt 10/10 từ skeleton hoặc đổi role bằng nút trong UI.
 
-## 1. Phân Chia Thời Gian & Vai Trò Trình Bày
+## Gate theo thứ tự
 
-| Thành Viên | Thời Lượng | Nội Dung Trình Bày |
-| :--- | :--- | :--- |
-| **Phạm Gia Khánh** | 5 phút | - Giới thiệu đề tài, kiến trúc ScyllaDB & Column Family.<br>- Mô hình 15 bảng theo 14 Access Patterns.<br>- Demo GUI DBeaver/NoSQL Manager kết nối cổng 9042, chạy CQL cơ bản/nâng cao.<br>- Demo Backup & Restore / Export CSV. |
-| **Trà Ngọc Nguyên Vũ** | 5 phút | - Kiến trúc Backend FastAPI + cassandra-driver.<br>- Cơ chế phân quyền RBAC (Admin, Dispatcher, Viewer).<br>- Quy tắc xử lý đa bảng nhất quán (Denormalization) khi tạo chuyến.<br>- Thuật toán tính quãng đường Haversine & lọc bước nhảy GPS. |
-| **Lê Hữu Luân** | 5 phút | - Giao diện người dùng Web + Leaflet Map thời gian thực.<br>- Trình diễn GPS Simulator phát tín hiệu xe di chuyển.<br>- Tái hiện 3 loại cảnh báo: Quá tốc độ, Ra khỏi vùng Geofence, Mất tín hiệu.<br>- Báo cáo tổng hợp số chuyến & km của tài xế theo tháng (Q14). |
+1. **Khánh — P1**: docker info/config; Scylla healthy; nodetool UN; CQL metadata;
+   driver và GUI đúng edition/license. Chụp ảnh/log thật.
+2. **Khánh — CSDL/seed**: nạp schema 15 bảng/3.200 GPS, chạy lại seed cùng ngày
+   đối chiếu count; đọc Q1–Q14 trong GUI; giải thích partition/clustering và TTL.
+3. **Vũ — backend**: khởi tạo bằng init_demo.ps1, đăng nhập ba tài khoản; Viewer
+   đọc được, POST ingest bị 403, request không token bị 401. Tắt CSDL thì API
+   không trả mock/PASS; kiểm tra dữ liệu đọc lại sau ingest.
+4. **Vũ — nghiệp vụ còn phải hoàn thiện**: CRUD; tạo/start/end/cancel chuyến,
+   liên kết GPS vào trip hiện hành; tính km từ GPS hợp lệ; overspeed/geofence/
+   mất tín hiệu, ACK/RESOLVE và chống lặp sau retry/restart.
+5. **Luân — frontend còn phải hoàn thiện**: frontend tĩnh phục vụ từ FastAPI,
+   login thật, Leaflet latest/history, bộ lọc, thao tác theo quyền. Không dùng
+   thay đổi React state để giả thao tác CSDL.
+6. **Khánh/Luân — dữ liệu hỗ trợ**: simulator gửi 3–5 giây, lịch sử nhiều bucket,
+   xe di chuyển trong N phút, báo cáo tài xế theo tháng. Km fixture và km được
+   tính khi kết thúc chuyến phải được phân biệt rõ.
+7. **Khánh — COPY backup/restore**: dừng writer/API, export 15 bảng, ghi count và
+   mẫu dữ liệu; sửa fixture có kiểm soát rồi RESTORE bản đúng. Đối chiếu count,
+   mẫu dòng và TTL; không gọi COPY là snapshot vật lý. Dữ liệu gốc luôn được
+   backup an toàn trước thay thế.
+8. **Cả nhóm — báo cáo**: GUI chính/so sánh có bằng chứng; ưu nhược Scylla và
+   mô hình query-first; báo cáo 50–60 trang theo PROJECT_QUYDINH.md; Word,
+   PowerPoint/source và phân công đủ. Mỗi thành viên giải thích phần mình.
 
----
+Chỉ chuyển bước phụ thuộc khi gate trước đã có bằng chứng. Prototype không
+thay thế phần ứng dụng nối CSDL thật. Khi gate thất bại, ghi log vào
+TEST_EVIDENCE.md/Nhap.md và xử lý đúng phạm vi; không tick hoàn thành.
 
-## 2. Kịch Bản 8 Bước Trình Chiếu
+## Thao tác smoke hiện có sau gate P1
 
-### Bước 1: Khởi động hệ thống (Khánh)
-- Mở PowerShell: `.\scripts\init_demo.ps1`.
-- Chỉ ra trạng thái ScyllaDB chạy trên Docker container, mở DBeaver kết nối `localhost:9042`.
-- Chạy thử query Q8 (`SELECT * FROM latest_locations_by_company`).
-
-### Bước 2: Đăng nhập & Kiểm tra RBAC (Vũ)
-- Đăng nhập bằng `khanh_admin`: Có toàn quyền quản trị, thêm xe, xem dữ liệu backup.
-- Đăng xuất, đăng nhập `vu_dispatcher`: Có quyền tạo chuyến, quản lý xe/tài xế, không có quyền quản trị user.
-- Đăng xuất, đăng nhập `luan_viewer`: Chế độ chỉ đọc, tất cả nút thêm/sửa/xóa và xử lý alert đều bị khóa.
-
-### Bước 3: Quản lý Đội xe & Tạo chuyến đi mới (Vũ)
-- Chọn mục **Quản lý Đội xe** -> Xem danh sách 10 xe và 8 tài xế.
-- Nhấn **Tạo Chuyến Đi Mới**:
-  - Mã chuyến: `TRIP_202609_999`
-  - Chọn xe: `VEH_001` (Hyundai Porter 1.5T)
-  - Chọn tài xế: `DRV_001` (Nguyễn Văn An)
-  - Điểm đi: Kho Tổng Thủ Đức -> Điểm đến: Quận 1, TP.HCM
-  - Trạng thái: `PLANNED` -> Chuyển sang `IN_PROGRESS`.
-- Nhấn mạnh: Dữ liệu được ghi đồng thời vào 3 bảng (`trips_by_id`, `trips_by_company_day`, `trips_by_driver_month`).
-
-### Bước 4: Bật GPS Simulator & Giám sát Bản đồ (Luân)
-- Mở màn hình **Bản đồ Trực quan (Leaflet)**.
-- Bật công tắc **GPS Simulator** (phát tín hiệu mỗi 3 giây).
-- Các xe bắt đầu di chuyển trên bản đồ TP.HCM:
-  - Marker xe cập nhật tọa độ liên tục.
-  - Tốc độ và hướng di chuyển hiển thị trong Popup.
-
-### Bước 5: Kích hoạt & Xử lý Cảnh Báo (Luân & Vũ)
-- Trên Simulator, chọn chế độ **Kích hoạt Vượt tốc độ (Overspeed)** cho xe `VEH_003`.
-- Bảng Cảnh báo hiển thị ngay alert đỏ: *Vận tốc 88.5 km/h vượt ngưỡng quy định 80 km/h*.
-- Chọn chế độ **Vượt Geofence**: Xe `VEH_007` đi ra khỏi tọa độ TP.HCM -> Tạo alert *GEOFENCE_EXIT*.
-- Dispatcher Vũ thao tác nhấn **Xác nhận (Acknowledge)** và **Đã xử lý (Resolve)** -> Cập nhật trạng thái alert trong ScyllaDB.
-
-### Bước 6: Xem Lịch Sử Hành Trình (Luân)
-- Chọn xe `VEH_001` và ngày hiện tại.
-- Bản đồ tự động vẽ đường Polyline nối các điểm GPS theo thứ tự thời gian (`location_events_by_vehicle_day`).
-- Hiển thị tổng số điểm hợp lệ và các điểm bị loại do bước nhảy GPS ảo.
-
-### Bước 7: Báo Cáo Tài Xế Theo Tháng - Q14 (Vũ)
-- Chọn tài xế `DRV_001` và tháng `2026-09`.
-- Hệ thống đọc partition tháng của tài xế và tính tổng km: ví dụ `186.4 km` và `8 chuyến đi`.
-
-### Bước 8: Sao lưu & Đối chiếu Dữ liệu (Khánh)
-- Chạy `.\scripts\backup.ps1` để xuất bảng ra file CSV.
-- Mở file CSV trong thư mục `docs/backups/` đối chiếu số dòng khớp với dữ liệu trên GUI DBeaver.
-- Kết luận: Hệ thống đạt chuẩn 10/10 mục theo yêu cầu đồ án.
+- Chạy `./scripts/init_demo.ps1`, mở `http://localhost:8000/docs`.
+- Login khanh_admin/vu_dispatcher/luan_viewer với Password123@ (demo local).
+- Authorize Bearer token; GET xe/latest/history/chuyến theo ngày seed.
+- Bật simulator bằng `docker compose --profile demo up -d simulator`.
+- Trong GUI, đọc lại location/latest/alerts sau request thật.
+- Thử POST ingest bằng Viewer: mong đợi 403, ghi response thực tế.
+- Mọi ngày giờ dùng UTC rõ timezone; truy vấn mẫu mặc định 28/09/2026.
